@@ -188,16 +188,29 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           </div>
         </section>
       </ScrollArea>
-      <footer className="app-credit inline-credit">
-        Made by.{" "}
-        <a
-          className="inline-link"
-          href="https://heavyrain39.github.io/portfolio/"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          Yakshawan
-        </a>
+      <footer className="app-credit">
+        <div className="promo-links">
+          Need focus? Try{" "}
+          <a
+            className="inline-link"
+            href="https://chromewebstore.google.com/detail/takt/kfgbaeikmjkommheilhphiageempppph"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            TAKT
+          </a>
+        </div>
+        <div className="author-credit">
+          Made by.{" "}
+          <a
+            className="inline-link"
+            href="https://heavyrain39.github.io/portfolio/"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Yakshawan
+          </a>
+        </div>
       </footer>
     </section>
   );
