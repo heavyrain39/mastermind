@@ -1,15 +1,22 @@
 # Dependencies
 node_modules/
+**/node_modules/
+.pnpm-store/
+.npm/
 
 # Build output
 dist/
 dist-electron/
 web/dist/
 web/dist-electron/
+mastermind/dist/
+mastermind/dist-electron/
 out/
 public/
 release/
 reference/
+coverage/
+*.tsbuildinfo
 
 # Electron-builder artifacts
 *.exe
@@ -22,5 +29,16 @@ Thumbs.db
 
 # Logs
 *.log
+.cache/
+.tmp/
+tmp/
+temp/
+*.zip
+*.wav
 .vite/
 .vscode/
+
+# Environment files
+.env
+.env.*
+!.env.example

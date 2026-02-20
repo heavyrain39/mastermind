@@ -1,0 +1,20 @@
+export type TrackStatus = "idle" | "queued" | "processing" | "done" | "error";
+
+export interface TrackItem {
+  id: string;
+  fileName: string;
+  status: TrackStatus;
+  selected: boolean;
+  sizeBytes: number;
+  addedAt: number;
+  sourceFile: File;
+  originalUrl: string;
+  masteredUrl?: string;
+  masteredFileName?: string;
+  masteredSizeBytes?: number;
+  originalLufs?: number;
+  masteredLufs?: number;
+  progressPercent?: number;
+  progressStatus?: string;
+  errorMessage?: string;
+}

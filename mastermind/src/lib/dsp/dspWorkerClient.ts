@@ -1,0 +1,248 @@
+type WorkerRequestType = "MEASURE_LUFS" | "RENDER_FULL_CHAIN" | "NORMALIZE";
+
+type PendingRequest = {
+  resolve: (value: any) => void;
+  reject: (reason?: unknown) => void;
+  onProgress?: (progress: number, status: string) => void;
+};
+
+type ExtractedChannels = {
+  channels: Float32Array[];
+  sampleRate: number;
+  transferables: ArrayBuffer[];
+};
+
+interface MeasureLufsResult {
+  lufs: number;
+}
+
+interface RenderFullChainResult {
+  channels: Float32Array[];
+  lufs: number;
+  measuredLufs: number;
+}
+
+interface NormalizeResult {
+  channels: Float32Array[];
+  currentLUFS: number;
+  finalLUFS: number;
+  peakDB: number;
+  gainApplied?: number;
+  limiterApplied?: boolean;
+}
+
+export interface FullChainSettings {
+  inputGain: number;
+  normalizeLoudness: boolean;
+  targetLufs: number;
+  truePeakLimit: boolean;
+  truePeakCeiling: number;
+  deharsh: boolean;
+  addAir: boolean;
+  tapeWarmth: boolean;
+  addPunch: boolean;
+  cleanLowEnd: boolean;
+  glueCompression: boolean;
+  centerBass: boolean;
+  stereoWidth: number;
+  eqLow: number;
+  eqLowMid: number;
+  eqMid: number;
+  eqHighMid: number;
+  eqHigh: number;
+}
+
+export interface RenderFullChainResponse {
+  audioBuffer: AudioBuffer;
+  lufs: number;
+  measuredLufs: number;
+}
+
+export interface NormalizeResponse {
+  audioBuffer: AudioBuffer;
+  currentLUFS: number;
+  finalLUFS: number;
+  peakDB: number;
+  gainApplied?: number;
+  limiterApplied?: boolean;
+}
+
+export class DSPWorkerClient {
+  private worker: Worker | null = null;
+  private pending = new Map<number, PendingRequest>();
+  private nextId = 1;
+
+  async init() {
+    if (this.worker) return;
+
+    this.worker = new Worker(new URL("../../../../web/workers/dsp-worker.js", import.meta.url), {
+      type: "module"
+    });
+    this.worker.onmessage = (event) => this.handleMessage(event);
+    this.worker.onerror = (event) => {
+      for (const pending of this.pending.values()) {
+        pending.reject(event.error ?? new Error("DSP worker error"));
+      }
+      this.pending.clear();
+    };
+  }
+
+  terminate() {
+    if (!this.worker) return;
+
+    this.worker.terminate();
+    this.worker = null;
+    for (const pending of this.pending.values()) {
+      pending.reject(new Error("DSP worker terminated"));
+    }
+    this.pending.clear();
+  }
+
+  async measureLufs(audioBuffer: AudioBuffer): Promise<MeasureLufsResult> {
+    const { channels, sampleRate, transferables } = this.extractChannels(audioBuffer);
+    const result = await this.send<MeasureLufsResult>(
+      "MEASURE_LUFS",
+      { channels, sampleRate },
+      undefined,
+      transferables
+    );
+    return result;
+  }
+
+  async renderFullChain(
+    audioBuffer: AudioBuffer,
+    settings: FullChainSettings,
+    mode: "preview" | "export" = "export",
+    onProgress?: (progress: number, status: string) => void
+  ): Promise<RenderFullChainResponse> {
+    const { channels, sampleRate, transferables } = this.extractChannels(audioBuffer);
+    const result = await this.send<RenderFullChainResult>(
+      "RENDER_FULL_CHAIN",
+      { channels, sampleRate, settings, mode },
+      onProgress,
+      transferables
+    );
+
+    return {
+      audioBuffer: this.createAudioBuffer(result.channels, sampleRate),
+      lufs: result.lufs,
+      measuredLufs: result.measuredLufs
+    };
+  }
+
+  async normalize(
+    audioBuffer: AudioBuffer,
+    targetLUFS = -14,
+    ceilingDB = -1,
+    onProgress?: (progress: number, status: string) => void
+  ): Promise<NormalizeResponse> {
+    const { channels, sampleRate, transferables } = this.extractChannels(audioBuffer);
+    const result = await this.send<NormalizeResult>(
+      "NORMALIZE",
+      { channels, sampleRate, targetLUFS, ceilingDB },
+      onProgress,
+      transferables
+    );
+
+    return {
+      audioBuffer: this.createAudioBuffer(result.channels, sampleRate),
+      currentLUFS: result.currentLUFS,
+      finalLUFS: result.finalLUFS,
+      peakDB: result.peakDB,
+      gainApplied: result.gainApplied,
+      limiterApplied: result.limiterApplied
+    };
+  }
+
+  private handleMessage(event: MessageEvent) {
+    const payload = event.data as {
+      id: number;
+      type?: string;
+      progress?: number;
+      status?: string;
+      success?: boolean;
+      result?: unknown;
+      error?: string;
+    };
+
+    const request = this.pending.get(payload.id);
+    if (!request) return;
+
+    if (payload.type === "PROGRESS") {
+      request.onProgress?.(payload.progress ?? 0, payload.status ?? "");
+      return;
+    }
+
+    this.pending.delete(payload.id);
+    if (payload.success) {
+      request.resolve(payload.result);
+    } else {
+      request.reject(new Error(payload.error || "DSP worker request failed"));
+    }
+  }
+
+  private async send<T>(
+    type: WorkerRequestType,
+    data: unknown,
+    onProgress?: (progress: number, status: string) => void,
+    transferables: ArrayBuffer[] = []
+  ): Promise<T> {
+    await this.init();
+    if (!this.worker) {
+      throw new Error("DSP worker is not available");
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      const id = this.nextId++;
+      this.pending.set(id, { resolve, reject, onProgress });
+
+      try {
+        this.worker!.postMessage({ type, id, data }, transferables);
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error);
+      }
+    });
+  }
+
+  private extractChannels(audioBuffer: AudioBuffer): ExtractedChannels {
+    const channels: Float32Array[] = [];
+    const transferables: ArrayBuffer[] = [];
+
+    for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex += 1) {
+      const copy = audioBuffer.getChannelData(channelIndex).slice();
+      channels.push(copy);
+      transferables.push(copy.buffer as ArrayBuffer);
+    }
+
+    return {
+      channels,
+      sampleRate: audioBuffer.sampleRate,
+      transferables
+    };
+  }
+
+  private createAudioBuffer(channels: Float32Array[], sampleRate: number): AudioBuffer {
+    const output = new AudioBuffer({
+      numberOfChannels: channels.length,
+      length: channels[0]?.length ?? 0,
+      sampleRate
+    });
+
+    for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
+      output.copyToChannel(new Float32Array(channels[channelIndex]), channelIndex);
+    }
+
+    return output;
+  }
+}
+
+let sharedClient: DSPWorkerClient | null = null;
+
+export async function getDSPWorkerClient() {
+  if (!sharedClient) {
+    sharedClient = new DSPWorkerClient();
+  }
+  await sharedClient.init();
+  return sharedClient;
+}

@@ -1,0 +1,97 @@
+import { useEffect, useMemo, useState } from "react";
+
+interface TooltipState {
+  text: string;
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+const PADDING = 12;
+
+export function TooltipLayer() {
+  const [tooltip, setTooltip] = useState<TooltipState>({
+    text: "",
+    x: 0,
+    y: 0,
+    visible: false
+  });
+
+  useEffect(() => {
+    const showTooltip = (target: HTMLElement) => {
+      const text = target.getAttribute("data-tooltip");
+      if (!text) return;
+
+      const rect = target.getBoundingClientRect();
+      const preferredY = rect.bottom + 10;
+      const fallbackY = rect.top - 10;
+      const viewportHeight = window.innerHeight;
+      const y = preferredY > viewportHeight - 120 ? fallbackY : preferredY;
+      const x = Math.min(window.innerWidth - PADDING, Math.max(PADDING, rect.left + rect.width / 2));
+
+      setTooltip({
+        text,
+        x,
+        y,
+        visible: true
+      });
+    };
+
+    const hideTooltip = () => {
+      setTooltip((prev) => ({ ...prev, visible: false }));
+    };
+
+    const onMouseOver = (event: MouseEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-tooltip]");
+      if (target) showTooltip(target);
+    };
+
+    const onMouseOut = (event: MouseEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-tooltip]");
+      if (!target) return;
+      const related = event.relatedTarget as Node | null;
+      if (related && target.contains(related)) return;
+      hideTooltip();
+    };
+
+    const onFocusIn = (event: FocusEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-tooltip]");
+      if (target) showTooltip(target);
+    };
+
+    const onFocusOut = () => {
+      hideTooltip();
+    };
+
+    window.addEventListener("mouseover", onMouseOver, true);
+    window.addEventListener("mouseout", onMouseOut, true);
+    window.addEventListener("focusin", onFocusIn, true);
+    window.addEventListener("focusout", onFocusOut, true);
+    window.addEventListener("scroll", hideTooltip, true);
+
+    return () => {
+      window.removeEventListener("mouseover", onMouseOver, true);
+      window.removeEventListener("mouseout", onMouseOut, true);
+      window.removeEventListener("focusin", onFocusIn, true);
+      window.removeEventListener("focusout", onFocusOut, true);
+      window.removeEventListener("scroll", hideTooltip, true);
+    };
+  }, []);
+
+  const style = useMemo(
+    () => ({
+      left: `${tooltip.x}px`,
+      top: `${tooltip.y}px`,
+      opacity: tooltip.visible ? 1 : 0,
+      transform: `translate(-50%, ${tooltip.visible ? "0" : "4px"})`
+    }),
+    [tooltip]
+  );
+
+  return (
+    <div className="floating-tooltip" style={style} aria-hidden={!tooltip.visible}>
+      {tooltip.text}
+    </div>
+  );
+}
+
