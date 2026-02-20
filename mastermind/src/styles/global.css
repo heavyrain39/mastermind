@@ -629,8 +629,17 @@ a {
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  font-size: 0;
   line-height: 1;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+}
+
+.icon-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .icon-btn.danger {
