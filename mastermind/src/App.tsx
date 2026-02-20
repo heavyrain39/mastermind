@@ -29,27 +29,21 @@ export default function App() {
                 onClick={() => setMode("light")}
                 aria-label="Light theme"
                 title="Light theme"
-              >
-                <FiSun aria-hidden />
-              </button>
+              ><FiSun aria-hidden /></button>
               <button
                 type="button"
                 className={`icon-btn ${mode === "dark" ? "is-active" : ""}`}
                 onClick={() => setMode("dark")}
                 aria-label="Dark theme"
                 title="Dark theme"
-              >
-                <FiMoon aria-hidden />
-              </button>
+              ><FiMoon aria-hidden /></button>
               <button
                 type="button"
                 className={`icon-btn ${mode === "system" ? "is-active" : ""}`}
                 onClick={() => setMode("system")}
                 aria-label="System theme"
                 title="System theme"
-              >
-                <FiMonitor aria-hidden />
-              </button>
+              ><FiMonitor aria-hidden /></button>
             </div>
           </div>
         </header>
