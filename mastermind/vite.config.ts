@@ -4,7 +4,6 @@ import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
-  base: "./",
   resolve: {
     alias: {
       "fft.js": path.resolve(__dirname, "node_modules/fft.js/lib/fft.js")
