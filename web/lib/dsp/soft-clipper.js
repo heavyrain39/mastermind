@@ -278,11 +278,12 @@ export function applyMasteringSoftClip(buffer, options = {}, onProgress = null) 
         return val;
       };
 
-      const satA = saturate(sampleA);
-      const satB = saturate(sampleB);
+      const satCurr = saturate(p2 * g2);
+      const satPrev = saturate(interpolateCatmullRom(p0 * g0, p1 * g1, p2 * g2, p3 * g3, 0.5));
+      const satNext = saturate(interpolateCatmullRom(p1 * g1, p2 * g2, p3 * g3, p4 * g4, 0.5));
 
-      // Downsample (Average)
-      output[i] = (satA + satB) * 0.5;
+      // Downsample using [0.25, 0.5, 0.25] zero-phase filter to prevent phase shift
+      output[i] = satPrev * 0.25 + satCurr * 0.5 + satNext * 0.25;
     }
 
     if (onProgress) {

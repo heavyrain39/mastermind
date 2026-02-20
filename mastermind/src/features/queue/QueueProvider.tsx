@@ -35,6 +35,7 @@ interface QueueContextValue {
   toggleTrackSelected: (trackId: string) => void;
   selectAllTracks: (selected: boolean) => void;
   processSelectedTracks: () => Promise<void>;
+  cancelProcessing: () => void;
   downloadTrack: (trackId: string) => void;
   downloadDoneTracksZip: () => Promise<void>;
 }
@@ -60,6 +61,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [tracks, setTracks] = useState<TrackItem[]>([]);
   const [activeTrackId, setActiveTrackIdState] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const cancelRef = useRef(false);
   const [masteringSettings, setMasteringSettings] = useState<MasteringSettings>(() =>
     readSettingsFromStorage()
   );
@@ -96,6 +98,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     const fixedPresetId = presetId as FixedPresetId;
     setMasteringSettings(getPresetSettings(fixedPresetId));
     setSelectedPresetId(fixedPresetId);
+  };
+
+  const cancelProcessing = () => {
+    cancelRef.current = true;
   };
 
   const addFiles = (files: File[]) => {
@@ -168,6 +174,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const processTracks = async (trackIds: string[]) => {
     if (trackIds.length === 0 || isProcessing) return;
     setIsProcessing(true);
+    cancelRef.current = false;
 
     const targets = trackIds.filter((trackId) => tracksRef.current.some((track) => track.id === trackId));
 
@@ -175,12 +182,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       prev.map((track) =>
         targets.includes(track.id)
           ? {
-              ...track,
-              status: "queued",
-              errorMessage: undefined,
-              progressPercent: 0,
-              progressStatus: "Queued"
-            }
+            ...track,
+            status: "queued",
+            errorMessage: undefined,
+            progressPercent: 0,
+            progressStatus: "Queued"
+          }
           : track
       )
     );
@@ -193,6 +200,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const workerSettings = toWorkerSettings(selectedSettings);
 
       for (const trackId of targets) {
+        if (cancelRef.current) {
+          setTracks((prev) =>
+            prev.map((track) =>
+              track.status === "queued"
+                ? { ...track, status: "idle", progressStatus: undefined, progressPercent: undefined }
+                : track
+            )
+          );
+          break;
+        }
+
         const sourceTrack = tracksRef.current.find((track) => track.id === trackId);
         if (!sourceTrack) continue;
 
@@ -200,12 +218,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           prev.map((track) =>
             track.id === trackId
               ? {
-                  ...track,
-                  status: "processing",
-                  errorMessage: undefined,
-                  progressPercent: 0,
-                  progressStatus: "Decoding audio"
-                }
+                ...track,
+                status: "processing",
+                errorMessage: undefined,
+                progressPercent: 0,
+                progressStatus: "Decoding audio"
+              }
               : track
           )
         );
@@ -237,10 +255,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   prev.map((track) =>
                     track.id === trackId
                       ? {
-                          ...track,
-                          progressPercent: percent,
-                          progressStatus: status || "Processing"
-                        }
+                        ...track,
+                        progressPercent: percent,
+                        progressStatus: status || "Processing"
+                      }
                       : track
                   )
                 );
@@ -253,10 +271,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               prev.map((track) =>
                 track.id === trackId
                   ? {
-                      ...track,
-                      progressPercent: 60,
-                      progressStatus: "Fallback rendering (safe normalize)"
-                    }
+                    ...track,
+                    progressPercent: 60,
+                    progressStatus: "Fallback rendering (safe normalize)"
+                  }
                   : track
               )
             );
@@ -270,10 +288,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   prev.map((track) =>
                     track.id === trackId
                       ? {
-                          ...track,
-                          progressPercent: percent,
-                          progressStatus: status || "Normalizing"
-                        }
+                        ...track,
+                        progressPercent: percent,
+                        progressStatus: status || "Normalizing"
+                      }
                       : track
                   )
                 );
@@ -312,6 +330,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 masteredUrl: nextMasteredUrl,
                 masteredFileName: nextFileName,
                 masteredSizeBytes: masteredBlob.size,
+                masteredPresetId: selectedSettings.presetId,
                 progressPercent: 100,
                 progressStatus: "Complete",
                 errorMessage: undefined
@@ -332,12 +351,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             prev.map((track) =>
               track.id === trackId
                 ? {
-                    ...track,
-                    status: "error",
-                    errorMessage: message,
-                    progressStatus: message,
-                    progressPercent: undefined
-                  }
+                  ...track,
+                  status: "error",
+                  errorMessage: message,
+                  progressStatus: message,
+                  progressPercent: undefined
+                }
                 : track
             )
           );
@@ -401,6 +420,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     toggleTrackSelected,
     selectAllTracks,
     processSelectedTracks,
+    cancelProcessing,
     downloadTrack,
     downloadDoneTracksZip
   };
@@ -418,8 +438,22 @@ export function useQueue() {
 
 function isSupportedAudioFile(file: File) {
   const lowerName = file.name.trim().toLowerCase();
-  if (lowerName.endsWith(".wav") || lowerName.endsWith(".wave")) return true;
-  if (file.type === "audio/wav" || file.type === "audio/x-wav" || file.type === "audio/wave") {
+  if (
+    lowerName.endsWith(".wav") ||
+    lowerName.endsWith(".wave") ||
+    lowerName.endsWith(".mp3") ||
+    lowerName.endsWith(".m4a") ||
+    lowerName.endsWith(".aac") ||
+    lowerName.endsWith(".ogg") ||
+    lowerName.endsWith(".flac")
+  ) {
+    return true;
+  }
+  if (
+    file.type === "audio/wav" ||
+    file.type === "audio/x-wav" ||
+    file.type === "audio/wave"
+  ) {
     return true;
   }
   return file.type.startsWith("audio/");
@@ -540,11 +574,11 @@ function readPresetFromStorage(): MasteringPresetId {
     if (!raw) return DEFAULT_PRESET_ID;
     if (
       raw === "transparent" ||
-      raw === "velvet-lift" ||
+      raw === "warm-tape" ||
       raw === "crystal-air" ||
       raw === "punch-glue" ||
       raw === "wide-cinema" ||
-      raw === "broadcast-calm" ||
+      raw === "loud-clear" ||
       raw === "custom"
     ) {
       return raw;

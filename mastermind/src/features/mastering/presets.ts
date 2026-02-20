@@ -2,11 +2,11 @@ import type { MasteringSettings } from "../../shared/types/mastering";
 
 export type MasteringPresetId =
   | "transparent"
-  | "velvet-lift"
+  | "warm-tape"
   | "crystal-air"
   | "punch-glue"
   | "wide-cinema"
-  | "broadcast-calm"
+  | "loud-clear"
   | "custom";
 
 export interface MasteringPresetOption {
@@ -16,46 +16,129 @@ export interface MasteringPresetOption {
 
 export type FixedPresetId = Exclude<MasteringPresetId, "custom">;
 
-const BASE_PRESET_SETTINGS: MasteringSettings = {
-  targetLufs: -14,
-  truePeakCeiling: -1,
-  outputTrimDb: 0,
-  normalizeLoudness: true,
-  warmth: 24,
-  clarity: 38,
-  air: 20,
-  lowEndClean: 30,
-  stereoWidth: 105,
-  spaceDepth: 12,
-  monoBassAnchor: true,
-  glueCompression: 15,
-  autoLevelStrength: 18,
-  sampleRate: 48000,
-  bitDepth: 24,
-  ditherMode: "none"
-};
-
 export const MASTERING_PRESET_OPTIONS: MasteringPresetOption[] = [
   { value: "transparent", label: "Transparent" },
-  { value: "velvet-lift", label: "Velvet Lift" },
+  { value: "warm-tape", label: "Warm Tape" },
   { value: "crystal-air", label: "Crystal Air" },
   { value: "punch-glue", label: "Punch Glue" },
   { value: "wide-cinema", label: "Wide Cinema" },
-  { value: "broadcast-calm", label: "Broadcast Calm" },
+  { value: "loud-clear", label: "Loud & Clear" },
   { value: "custom", label: "Custom (Reset)" }
 ];
 
 export const DEFAULT_PRESET_ID: FixedPresetId = "transparent";
 
 export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
-  transparent: { ...BASE_PRESET_SETTINGS },
-  "velvet-lift": { ...BASE_PRESET_SETTINGS },
-  "crystal-air": { ...BASE_PRESET_SETTINGS },
-  "punch-glue": { ...BASE_PRESET_SETTINGS },
-  "wide-cinema": { ...BASE_PRESET_SETTINGS },
-  "broadcast-calm": { ...BASE_PRESET_SETTINGS }
+  transparent: {
+    targetLufs: -14,
+    truePeakCeiling: -1,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 24,
+    clarity: 38,
+    air: 20,
+    lowEndClean: 30,
+    stereoWidth: 105,
+    spaceDepth: 12,
+    monoBassAnchor: true,
+    glueCompression: 15,
+    autoLevelStrength: 18,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  },
+  "warm-tape": {
+    targetLufs: -14,
+    truePeakCeiling: -1,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 62,
+    clarity: 18,
+    air: 8,
+    lowEndClean: 15,
+    stereoWidth: 98,
+    spaceDepth: 28,
+    monoBassAnchor: true,
+    glueCompression: 40,
+    autoLevelStrength: 22,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  },
+  "crystal-air": {
+    targetLufs: -14,
+    truePeakCeiling: -1,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 10,
+    clarity: 55,
+    air: 65,
+    lowEndClean: 40,
+    stereoWidth: 115,
+    spaceDepth: 22,
+    monoBassAnchor: true,
+    glueCompression: 8,
+    autoLevelStrength: 12,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  },
+  "punch-glue": {
+    targetLufs: -12,
+    truePeakCeiling: -0.5,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 30,
+    clarity: 42,
+    air: 15,
+    lowEndClean: 55,
+    stereoWidth: 100,
+    spaceDepth: 8,
+    monoBassAnchor: true,
+    glueCompression: 65,
+    autoLevelStrength: 50,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  },
+  "wide-cinema": {
+    targetLufs: -16,
+    truePeakCeiling: -1.5,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 20,
+    clarity: 30,
+    air: 45,
+    lowEndClean: 25,
+    stereoWidth: 135,
+    spaceDepth: 70,
+    monoBassAnchor: false,
+    glueCompression: 12,
+    autoLevelStrength: 15,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  },
+  "loud-clear": {
+    targetLufs: -11,
+    truePeakCeiling: -0.3,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 15,
+    clarity: 50,
+    air: 35,
+    lowEndClean: 50,
+    stereoWidth: 105,
+    spaceDepth: 10,
+    monoBassAnchor: true,
+    glueCompression: 35,
+    autoLevelStrength: 40,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none"
+  }
 };
 
 export function getPresetSettings(presetId: FixedPresetId): MasteringSettings {
-  return { ...PRESET_SETTINGS[presetId] };
+  return { ...PRESET_SETTINGS[presetId], presetId };
 }

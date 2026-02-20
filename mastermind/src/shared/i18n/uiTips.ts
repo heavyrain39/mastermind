@@ -45,6 +45,15 @@ export interface UiTips {
     bitDepth: string;
     dither: string;
   };
+  presets: {
+    transparent: string;
+    "warm-tape": string;
+    "crystal-air": string;
+    "punch-glue": string;
+    "wide-cinema": string;
+    "loud-clear": string;
+    custom: string;
+  };
 }
 
 const tipsByLocale: Record<UiLocale, UiTips> = {
@@ -53,7 +62,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       themeMode: "테마는 시각적 표시 모드만 전환합니다. 출력 결과나 데이터 신호 체계에는 영향을 미치지 않습니다."
     },
     queue: {
-      uploadWav: "분석 및 처리할 WAV 파일들을 대기열 시스템에 할당합니다.",
+      uploadWav: "분석 및 처리할 오디오 파일(WAV, MP3, M4A, OGG, FLAC)을 대기열 시스템에 할당합니다.",
       processSelected: "현재 선택된 트랙 세트에 한해 마스터링 루틴을 개시합니다.",
       processAll: "대기열의 모든 트랙에 대한 일괄 처리 루틴을 개시합니다.",
       statusFilter: "처리 상태 분류 지표에 따라 목록을 필터링합니다.",
@@ -92,6 +101,15 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       sampleRate: "소리의 해상도를 결정합니다. 영상용(48kHz) 또는 보편적인 음원용(44.1kHz)을 선택하세요.",
       bitDepth: "소리의 다이내믹 레인지를 결정합니다. 배포 목적지에 맞춰 24-bit 또는 16-bit를 지정합니다.",
       dither: "비트 해상도를 낮출 때 생기는 디지털 노이즈를, 듣기 좋은 자연스러운 아주 작은 노이즈로 감쪽같이 덮어줍니다."
+    },
+    presets: {
+      transparent: "원본의 밸런스를 최대한 존중하며, 볼륨 정규화와 최소한의 보정만 적용합니다.",
+      "warm-tape": "아날로그 테이프의 따뜻한 질감을 재현합니다. 저중역 배음을 보강하고 고역을 부드럽게 다듬습니다.",
+      "crystal-air": "초고역 확장과 맑은 결을 우선시합니다. 개방감 있고 선명한 사운드를 원할 때 적합합니다.",
+      "punch-glue": "타격감과 응집력을 극대화합니다. 다이나믹스를 강하게 압축하여 밀도 높은 결과물을 만듭니다.",
+      "wide-cinema": "넓은 스테레오 이미지와 깊은 공간감을 연출합니다. 시네마틱 스코어나 앰비언트 음원에 적합합니다.",
+      "loud-clear": "유튜브 등 스트리밍 배포에 최적화된 설정입니다. 높은 음압과 깔끔한 디테일 사이의 균형을 잡습니다.",
+      custom: "사용자가 직접 파라미터를 조정합니다. 선택 시 기본 프리셋(Transparent) 수치로 초기화됩니다."
     }
   },
   en: {
@@ -99,7 +117,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       themeMode: "Switches the visual display mode. This action does not impact the output signal or mastering pipeline."
     },
     queue: {
-      uploadWav: "Allocate WAV files to the queue system for analysis and processing.",
+      uploadWav: "Allocate audio files (WAV, MP3, M4A, OGG, FLAC) to the queue system for analysis and processing.",
       processSelected: "Initiate mastering routine exclusively on the currently designated track subset.",
       processAll: "Initiate batch mastering routine across all tracks in the current queue.",
       statusFilter: "Filter queue displays according to processing status parameters.",
@@ -138,6 +156,15 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       sampleRate: "Define the output sample rate. 48kHz and 44.1kHz are supported depending on deployment requirements.",
       bitDepth: "Define the output bit depth. Select either 24-bit or 16-bit pipeline based on the destination target.",
       dither: "Select the algorithm to suppress quantization noise generated during bit-depth downward conversion."
+    },
+    presets: {
+      transparent: "Respects the original balance with minimal intervention. Applies loudness normalization and subtle correction only.",
+      "warm-tape": "Recreates the warm texture of analog tape. Enhances low-mid harmonics and gently rolls off the highs.",
+      "crystal-air": "Prioritizes ultra-high extension and pristine clarity. Ideal for open, sparkling sonic landscapes.",
+      "punch-glue": "Maximizes impact and cohesion. Applies heavy dynamic compression for a dense, powerful result.",
+      "wide-cinema": "Creates a wide stereo image and deep spatial dimension. Suited for cinematic scores and ambient material.",
+      "loud-clear": "Optimized for streaming platforms such as YouTube. Balances high loudness with clean, detailed output.",
+      custom: "Allows manual parameter adjustment. Selecting this resets values to the default Transparent baseline."
     }
   }
 };

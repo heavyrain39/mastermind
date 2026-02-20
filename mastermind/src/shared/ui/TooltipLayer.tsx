@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 
+type TooltipPosition = "bottom" | "left";
+
 interface TooltipState {
   text: string;
   x: number;
   y: number;
   visible: boolean;
+  position: TooltipPosition;
 }
 
 const PADDING = 12;
@@ -14,7 +17,8 @@ export function TooltipLayer() {
     text: "",
     x: 0,
     y: 0,
-    visible: false
+    visible: false,
+    position: "bottom"
   });
 
   useEffect(() => {
@@ -22,19 +26,25 @@ export function TooltipLayer() {
       const text = target.getAttribute("data-tooltip");
       if (!text) return;
 
+      const position =
+        (target.getAttribute("data-tooltip-position") as TooltipPosition) ?? "bottom";
       const rect = target.getBoundingClientRect();
-      const preferredY = rect.bottom + 10;
-      const fallbackY = rect.top - 10;
-      const viewportHeight = window.innerHeight;
-      const y = preferredY > viewportHeight - 120 ? fallbackY : preferredY;
-      const x = Math.min(window.innerWidth - PADDING, Math.max(PADDING, rect.left + rect.width / 2));
 
-      setTooltip({
-        text,
-        x,
-        y,
-        visible: true
-      });
+      let x: number;
+      let y: number;
+
+      if (position === "left") {
+        x = rect.left - 12;
+        y = rect.top + rect.height / 2;
+      } else {
+        const preferredY = rect.bottom + 10;
+        const fallbackY = rect.top - 10;
+        const viewportHeight = window.innerHeight;
+        y = preferredY > viewportHeight - 120 ? fallbackY : preferredY;
+        x = Math.min(window.innerWidth - PADDING, Math.max(PADDING, rect.left + rect.width / 2));
+      }
+
+      setTooltip({ text, x, y, visible: true, position });
     };
 
     const hideTooltip = () => {
@@ -78,14 +88,19 @@ export function TooltipLayer() {
     };
   }, []);
 
+  const isLeft = tooltip.position === "left";
+
   const style = useMemo(
     () => ({
       left: `${tooltip.x}px`,
       top: `${tooltip.y}px`,
       opacity: tooltip.visible ? 1 : 0,
-      transform: `translate(-50%, ${tooltip.visible ? "0" : "4px"})`
+      transform: isLeft
+        ? `translate(-100%, -50%) translateX(${tooltip.visible ? "0" : "4px"})`
+        : `translate(-50%, ${tooltip.visible ? "0" : "4px"})`,
+      maxWidth: isLeft ? "380px" : "320px"
     }),
-    [tooltip]
+    [tooltip, isLeft]
   );
 
   return (
@@ -94,4 +109,3 @@ export function TooltipLayer() {
     </div>
   );
 }
-

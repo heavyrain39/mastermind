@@ -14,6 +14,7 @@ export interface TrackItem {
   masteredSizeBytes?: number;
   originalLufs?: number;
   masteredLufs?: number;
+  masteredPresetId?: string;
   progressPercent?: number;
   progressStatus?: string;
   errorMessage?: string;

@@ -17,5 +17,6 @@ export interface MasteringSettings {
   sampleRate: 44100 | 48000;
   bitDepth: 16 | 24;
   ditherMode: DitherMode;
+  presetId?: string;
 }
 

@@ -308,6 +308,12 @@ a {
   color: var(--text);
 }
 
+.queue-dropzone.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .queue-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -532,10 +538,6 @@ a {
 }
 
 .dropdown-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  right: 0;
   min-width: 100%;
   border: 1px solid var(--line-strong);
   background: var(--panel-bg);
@@ -665,6 +667,22 @@ a {
   margin-left: 30px;
   font-size: 11px;
   color: #bf4d4d;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-strong);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .track-empty {

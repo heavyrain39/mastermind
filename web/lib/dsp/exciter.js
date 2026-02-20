@@ -183,16 +183,16 @@ export class Exciter {
 
           const p4 = filtered[i + 2] || 0;
 
-          // Process original
-          const wetA = Math.tanh(p2 * drive + bias);
+          // Zero-phase oversampling and DC offset correction
+          const biasOffset = Math.tanh(bias);
+          const wetCurr = Math.tanh(p2 * drive + bias) - biasOffset;
+          const sPrev = interpolateCatmullRom(p0, p1, p2, p3, 0.5);
+          const wetPrev = Math.tanh(sPrev * drive + bias) - biasOffset;
+          const sNext = interpolateCatmullRom(p1, p2, p3, p4, 0.5);
+          const wetNext = Math.tanh(sNext * drive + bias) - biasOffset;
 
-          // Process interpolated (i + 0.5)
-          const sB = interpolateCatmullRom(p1, p2, p3, p4, 0.5);
-          const wetB = Math.tanh(sB * drive + bias);
-
-          // Downsample (Simple Average LPF)
-          // (wetA + wetB) * 0.5
-          const wet = (wetA + wetB) * 0.5;
+          // Downsample using zero-phase [0.25, 0.5, 0.25] filter
+          const wet = wetPrev * 0.25 + wetCurr * 0.5 + wetNext * 0.25;
 
           out[i] = dry + wet * mixRatio;
         }

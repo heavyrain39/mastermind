@@ -11,6 +11,7 @@ import { ScrollArea } from "../../shared/ui/ScrollArea";
 import { useQueue } from "../queue/QueueProvider";
 import type { UiLocale } from "../../shared/i18n/useUiLocale";
 import { getUiTips } from "../../shared/i18n/uiTips";
+import { MASTERING_PRESET_OPTIONS } from "../mastering/presets";
 
 export const globalVisualizerContext = {
   analyser: null as AnalyserNode | null,
@@ -27,6 +28,7 @@ const WAVE_BINS = 360;
 
 export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const { tracks, activeTrack, activeTrackId, setActiveTrackId, downloadTrack, downloadDoneTracksZip } = useQueue();
+  const [isZipping, setIsZipping] = useState(false);
   const [playingMode, setPlayingMode] = useState<PlaybackMode | null>(null);
   const [currentTimeA, setCurrentTimeA] = useState(0);
   const [currentTimeB, setCurrentTimeB] = useState(0);
@@ -233,6 +235,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         />
         <WaveBlock
           label="Mastered"
+          presetId={activeTrack?.masteredPresetId}
           lufs={activeTrack?.masteredLufs}
           isPlaying={playingMode === "B"}
           hasAudio={hasMastered}
@@ -251,11 +254,24 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
           type="button"
           className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.downloadDoneTracks}
-          onClick={() => void downloadDoneTracksZip()}
-          disabled={abReadyTracks.length === 0}
+          onClick={async () => {
+            setIsZipping(true);
+            try {
+              await downloadDoneTracksZip();
+            } finally {
+              setIsZipping(false);
+            }
+          }}
+          disabled={abReadyTracks.length === 0 || isZipping}
         >
-          <FiDownload aria-hidden />
-          Download All
+          {isZipping ? (
+            <span className="spinner" />
+          ) : (
+            <>
+              <FiDownload aria-hidden />
+              Download All
+            </>
+          )}
         </button>
       </div>
 
@@ -281,6 +297,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
 
 function WaveBlock({
   label,
+  presetId,
   lufs,
   isPlaying,
   hasAudio,
@@ -293,6 +310,7 @@ function WaveBlock({
   onSeek
 }: {
   label: string;
+  presetId?: string;
   lufs?: number;
   isPlaying: boolean;
   hasAudio: boolean;
@@ -305,11 +323,18 @@ function WaveBlock({
   onSeek: (event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>) => void;
 }) {
   const progress = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0;
+
+  let finalLabel = label;
+  if (presetId) {
+    const presetName = MASTERING_PRESET_OPTIONS.find(p => p.value === presetId)?.label || "Custom";
+    finalLabel = `${label} [ ${presetName} ]`;
+  }
+
   return (
     <div className="wave-block">
       <header>
         <div className="wave-label-wrap">
-          <strong>{label}</strong>
+          <strong>{finalLabel}</strong>
           <span>{formatLufs(lufs)}</span>
         </div>
         <span className="time-readout">

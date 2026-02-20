@@ -404,8 +404,9 @@ function applyLookaheadLimiterToChannels(
 
     const targetIndex = Math.max(0, i - lookaheadSamples);
     if (requiredGain < gainEnvelope[targetIndex]) {
+      const range = Math.max(1, i - targetIndex);
       for (let j = targetIndex; j <= i; j++) {
-        const progress = (j - targetIndex) / lookaheadSamples;
+        const progress = (j - targetIndex) / range;
         const smoothedGain = gainEnvelope[targetIndex] + (requiredGain - gainEnvelope[targetIndex]) * progress;
         gainEnvelope[j] = Math.min(gainEnvelope[j], smoothedGain);
       }
@@ -564,9 +565,10 @@ function applyMasteringSoftClipToChannels(channels, sampleRate, ceilingDB = -1, 
 
         // Apply to lookahead window
         const startIdx = Math.max(0, i - lookaheadSamples);
+        const lookaheadRange = Math.max(1, i - startIdx);
         for (let j = startIdx; j <= i; j++) {
           // Interpolate gain reduction across lookahead
-          const t = (j - startIdx) / Math.max(1, i - startIdx);
+          const t = (i === startIdx) ? 1.0 : (j - startIdx) / lookaheadRange;
           const interpolatedGain = 1.0 + (requiredGain - 1.0) * t;
           gainEnvelope[j] = Math.min(gainEnvelope[j], interpolatedGain);
         }
@@ -1216,6 +1218,44 @@ function applyStereoProcessingToChannels(channels, sampleRate, id, options = {})
   return [outLeft, outRight];
 }
 
+function calcPeakingCoeffs(sampleRate, frequency, gainDB, Q) {
+  const A = Math.pow(10, gainDB / 40);
+  const w0 = 2 * Math.PI * frequency / sampleRate;
+  const alpha = Math.sin(w0) / (2 * Q);
+  const cosW0 = Math.cos(w0);
+  const b0 = 1 + alpha * A;
+  const b1 = -2 * cosW0;
+  const b2 = 1 - alpha * A;
+  const a0 = 1 + alpha / A;
+  const a1 = -2 * cosW0;
+  const a2 = 1 - alpha / A;
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };
+}
+
+function calcLowShelfCoeffs(sampleRate, frequency, gainDB, Q) {
+  const A = Math.pow(10, gainDB / 40);
+  const w0 = 2 * Math.PI * frequency / sampleRate;
+  const alpha = Math.sin(w0) / (2 * Q);
+  const cosW0 = Math.cos(w0);
+  const sqrtA = Math.sqrt(A);
+  const b0 = A * ((A + 1) - (A - 1) * cosW0 + 2 * sqrtA * alpha);
+  const b1 = 2 * A * ((A - 1) - (A + 1) * cosW0);
+  const b2 = A * ((A + 1) - (A - 1) * cosW0 - 2 * sqrtA * alpha);
+  const a0 = (A + 1) + (A - 1) * cosW0 + 2 * sqrtA * alpha;
+  const a1 = -2 * ((A - 1) + (A + 1) * cosW0);
+  const a2 = (A + 1) + (A - 1) * cosW0 - 2 * sqrtA * alpha;
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };
+}
+
+function applyEQBand(buffer, coeffs) {
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    const filtered = applyBiquadFilter(data, coeffs);
+    buffer.copyToChannel(filtered, ch);
+  }
+  return buffer;
+}
+
 /**
  * Apply 5-Band EQ + Cut Mud
  */
@@ -1235,32 +1275,32 @@ function applyParametricEQ(buffer, settings) {
 
   // 1. Low Shelf (80Hz)
   if (eqValues.low !== 0) {
-    outBuffer = applyBiquadFilter(outBuffer, 'lowshelf', 80, eqValues.low, 1.0, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcLowShelfCoeffs(sampleRate, 80, eqValues.low, 0.707));
   }
 
   // 2. Low Mid (250Hz)
   if (eqValues.lowMid !== 0) {
-    outBuffer = applyBiquadFilter(outBuffer, 'peaking', 250, eqValues.lowMid, 1.0, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 250, eqValues.lowMid, 1.0));
   }
 
   // 3. Mid (1kHz)
   if (eqValues.mid !== 0) {
-    outBuffer = applyBiquadFilter(outBuffer, 'peaking', 1000, eqValues.mid, 1.0, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 1000, eqValues.mid, 1.0));
   }
 
   // 4. High Mid (4kHz)
   if (eqValues.highMid !== 0) {
-    outBuffer = applyBiquadFilter(outBuffer, 'peaking', 4000, eqValues.highMid, 1.0, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 4000, eqValues.highMid, 1.0));
   }
 
   // 5. High Shelf (12kHz)
   if (eqValues.high !== 0) {
-    outBuffer = applyBiquadFilter(outBuffer, 'highshelf', 12000, eqValues.high, 1.0, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcHighShelfCoeffs(sampleRate, 12000, eqValues.high, 0.707));
   }
 
   // 6. Cut Mud (250Hz, -3dB, Q=1.5)
   if (settings.cutMud) {
-    outBuffer = applyBiquadFilter(outBuffer, 'peaking', 250, -3.0, 1.5, sampleRate);
+    outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 250, -3.0, 1.5));
   }
 
   return outBuffer;

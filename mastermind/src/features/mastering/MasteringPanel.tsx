@@ -43,6 +43,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
             value={selectedPresetId}
             options={MASTERING_PRESET_OPTIONS}
             onChange={(next) => setMasteringPreset(next as MasteringPresetId)}
+            tooltips={tips.presets}
           />
         </div>
       </div>

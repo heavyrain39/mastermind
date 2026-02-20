@@ -24,6 +24,7 @@ export function QueuePanel({ locale }: QueuePanelProps) {
     selectAllTracks,
     removeTrack,
     processSelectedTracks,
+    cancelProcessing,
     downloadTrack
   } = useQueue();
 
@@ -34,7 +35,6 @@ export function QueuePanel({ locale }: QueuePanelProps) {
 
   const allSelected = tracks.length > 0 && selectedCount === tracks.length;
   const partiallySelected = selectedCount > 0 && !allSelected;
-  const canProcess = selectedCount > 0 && !isProcessing;
 
   useEffect(() => {
     if (toggleAllRef.current) {
@@ -71,26 +71,31 @@ export function QueuePanel({ locale }: QueuePanelProps) {
         className="visually-hidden"
         type="file"
         multiple
-        accept=".wav,.wave,audio/*"
+        accept=".wav,.wave,.mp3,.m4a,.aac,.ogg,.flac,audio/*"
         onChange={onChangeFiles}
       />
 
       <div
-        className={`queue-dropzone ${isDragOver ? "is-drag-over" : ""}`}
+        className={`queue-dropzone ${isDragOver ? "is-drag-over" : ""} ${isProcessing ? "is-disabled" : ""}`}
         onDragOver={(event) => {
+          if (isProcessing) return;
           event.preventDefault();
           setIsDragOver(true);
         }}
         onDragLeave={() => setIsDragOver(false)}
-        onDrop={onDropFiles}
+        onDrop={(event) => {
+          if (isProcessing) return;
+          onDropFiles(event);
+        }}
       >
-        Drop audio files here
+        Drop audio files here (WAV · MP3 · M4A · OGG · FLAC)
       </div>
 
       <div className="queue-actions">
         <button
           type="button"
           onClick={onClickUpload}
+          disabled={isProcessing}
           className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.uploadWav}
         >
@@ -98,12 +103,12 @@ export function QueuePanel({ locale }: QueuePanelProps) {
         </button>
         <button
           type="button"
-          onClick={processSelectedTracks}
-          disabled={!canProcess}
+          onClick={isProcessing ? cancelProcessing : processSelectedTracks}
+          disabled={!isProcessing && selectedCount === 0}
           className="primary-action-btn has-tooltip"
-          data-tooltip={tips.queue.processSelected}
+          data-tooltip={isProcessing ? "Stop processing" : tips.queue.processSelected}
         >
-          Start
+          {isProcessing ? "Stop" : "Start"}
         </button>
       </div>
 
