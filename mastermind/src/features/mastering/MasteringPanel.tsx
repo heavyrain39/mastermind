@@ -38,7 +38,6 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
       <div className="panel-head mastering-head">
         <h2>Mastering Controls</h2>
         <div className="preset-field">
-          <span>Preset</span>
           <Dropdown
             ariaLabel="Mastering preset"
             value={selectedPresetId}
@@ -188,6 +187,17 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           </div>
         </section>
       </ScrollArea>
+      <footer className="app-credit inline-credit">
+        Made by.{" "}
+        <a
+          className="inline-link"
+          href="https://heavyrain39.github.io/portfolio/"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          Yakshawan
+        </a>
+      </footer>
     </section>
   );
 }
@@ -246,6 +256,7 @@ function RangeRow({
           max={max}
           step={step}
           value={value}
+          style={{ "--progress": `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%` } as React.CSSProperties}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <strong>{display}</strong>

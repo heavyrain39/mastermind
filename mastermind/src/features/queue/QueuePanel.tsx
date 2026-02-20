@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { FiTrash2 } from "react-icons/fi";
+import { FiTrash2, FiDownload } from "react-icons/fi";
 import { useQueue } from "./QueueProvider";
 import { ScrollArea } from "../../shared/ui/ScrollArea";
 import type { UiLocale } from "../../shared/i18n/useUiLocale";
@@ -23,7 +23,8 @@ export function QueuePanel({ locale }: QueuePanelProps) {
     toggleTrackSelected,
     selectAllTracks,
     removeTrack,
-    processSelectedTracks
+    processSelectedTracks,
+    downloadTrack
   } = useQueue();
 
   const selectedCount = useMemo(
@@ -90,7 +91,7 @@ export function QueuePanel({ locale }: QueuePanelProps) {
         <button
           type="button"
           onClick={onClickUpload}
-          className="has-tooltip"
+          className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.uploadWav}
         >
           Upload
@@ -99,10 +100,10 @@ export function QueuePanel({ locale }: QueuePanelProps) {
           type="button"
           onClick={processSelectedTracks}
           disabled={!canProcess}
-          className="has-tooltip"
+          className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.processSelected}
         >
-          Process
+          Start
         </button>
       </div>
 
@@ -117,7 +118,7 @@ export function QueuePanel({ locale }: QueuePanelProps) {
           />
         </label>
         <span>Uploaded Track</span>
-        <span>Remove</span>
+        <span></span>
       </div>
 
       <ScrollArea className="queue-scroll">
@@ -143,6 +144,20 @@ export function QueuePanel({ locale }: QueuePanelProps) {
                 >
                   <strong>{track.fileName}</strong>
                 </button>
+                {track.status === "done" ? (
+                  <button
+                    type="button"
+                    className="icon-btn has-tooltip"
+                    data-tooltip={tips.queue.downloadTrack}
+                    aria-label={`Download ${track.fileName}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      downloadTrack(track.id);
+                    }}
+                  >
+                    <FiDownload aria-hidden />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="icon-btn danger has-tooltip"

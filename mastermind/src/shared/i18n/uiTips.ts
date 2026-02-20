@@ -50,100 +50,94 @@ export interface UiTips {
 const tipsByLocale: Record<UiLocale, UiTips> = {
   ko: {
     common: {
-      themeMode:
-        "테마는 화면 스타일만 바꿉니다. 음량이나 마스터링 결과 자체에는 영향을 주지 않습니다."
+      themeMode: "테마는 시각적 표시 모드만 전환합니다. 출력 결과나 데이터 신호 체계에는 영향을 미치지 않습니다."
     },
     queue: {
-      uploadWav: "WAV 파일을 여러 개 한 번에 추가합니다.",
-      processSelected: "선택한 트랙만 마스터링 큐에 넣어 처리합니다.",
-      processAll: "큐에 있는 모든 트랙을 한 번에 처리합니다.",
-      statusFilter: "상태별로 목록을 좁혀서 확인합니다.",
-      selectAll: "큐의 모든 트랙 선택 상태를 한 번에 바꿉니다.",
-      clearQueue: "큐를 비우고 로드된 트랙을 모두 제거합니다.",
-      selectTrack: "이 곡을 처리 대상에 포함하거나 제외합니다.",
-      setActiveTrack: "이 곡을 A/B 모니터의 현재 트랙으로 엽니다.",
-      downloadTrack: "이 곡의 마스터링 결과 파일을 다운로드합니다.",
-      downloadDoneTracks: "완료된 모든 트랙의 결과 파일을 순차 다운로드합니다.",
-      removeTrack: "이 곡만 큐에서 제거합니다."
+      uploadWav: "분석 및 처리할 WAV 파일들을 대기열 시스템에 할당합니다.",
+      processSelected: "현재 선택된 트랙 세트에 한해 마스터링 루틴을 개시합니다.",
+      processAll: "대기열의 모든 트랙에 대한 일괄 처리 루틴을 개시합니다.",
+      statusFilter: "처리 상태 분류 지표에 따라 목록을 필터링합니다.",
+      selectAll: "대기열 전원의 선택 상태를 일괄 반전 처리합니다.",
+      clearQueue: "대기열의 모든 트랙 데이터를 메모리에서 완전 초기화합니다.",
+      selectTrack: "마스터링 처리 대상으로 지정하거나 지정 해제합니다.",
+      setActiveTrack: "해당 트랙을 A/B 모니터링 시스템의 활성 채널로 전환합니다.",
+      downloadTrack: "완료 처리된 트랙의 마스터 데이터를 로컬 환경으로 전송(다운로드)합니다.",
+      downloadDoneTracks: "처리 완료된 전체 트랙 데이터를 압축하여 순차 전송합니다.",
+      removeTrack: "해당 트랙을 대기열에서 영구히 배제합니다."
     },
     ab: {
-      play: "현재 선택된 A 또는 B 소스를 재생합니다.",
-      stop: "재생을 멈추고 재생 위치를 처음으로 돌립니다.",
-      modeA: "원본 오디오(A)로 모니터링합니다.",
-      modeB: "마스터링 결과(B)로 모니터링합니다.",
-      waveSeekOriginal: "원본 파형에서 클릭한 위치로 즉시 이동합니다.",
-      waveSeekMastered: "마스터 파형에서 클릭한 위치로 즉시 이동합니다.",
-      openAb: "선택한 결과를 중앙 A/B 모니터로 불러옵니다.",
-      readyListCta: "포트폴리오에서 다른 오디오/제품 프로젝트도 확인할 수 있습니다."
+      play: "현재 지정된 소스 채널(A 또는 B)의 재생 프로세스를 시작합니다.",
+      stop: "재생 프로세스를 중단하고 타임라인 0:00 지점으로 복귀합니다.",
+      modeA: "채널 A (원본 데이터) 모니터링 모드를 활성화합니다.",
+      modeB: "채널 B (마스터링 완료형 데이터) 모니터링 모드를 활성화합니다.",
+      waveSeekOriginal: "원본 파형의 특정 시점으로 즉시 탐색(Seek)합니다.",
+      waveSeekMastered: "마스터 파형의 특정 시점으로 즉시 탐색(Seek)합니다.",
+      openAb: "완료된 해당 트랙을 중앙 A/B 모니터 시스템에 할당합니다.",
+      readyListCta: "포트폴리오 페이지에서 추가적인 임무 기록을 열람할 수 있습니다."
     },
     mastering: {
-      targetLufs:
-        "유튜브 기준에 맞추기 좋은 평균 음량 목표치입니다. 기본값 -14 LUFS는 과도한 라우드니스 경쟁을 줄여줍니다.",
-      truePeakCeiling:
-        "인코딩 과정에서 생길 수 있는 오버를 막기 위한 최대 피크 한도입니다. 일반적으로 -1.0 dBTP가 안전합니다.",
-      outputTrim: "최종 출력 전체 레벨을 미세 조정해 과출력을 방지합니다.",
-      normalizeLoudness: "트랙 간 평균 체감 음량을 더 균일하게 맞춥니다.",
-      warmth: "저중역의 온기를 더해 차갑지 않은 인상을 만듭니다.",
-      clarity: "거칠고 자극적인 대역을 정리해 더 부드럽고 또렷하게 만듭니다.",
-      air: "고역의 개방감과 숨결감을 더합니다.",
-      lowEndClean: "저역의 번짐을 줄여 킥/베이스 분리를 개선합니다.",
-      stereoWidth: "좌우 폭을 조절해 공간감 인상을 바꿉니다.",
-      spaceDepth: "전후 거리감과 잔향 느낌을 조절합니다.",
-      monoBassAnchor: "저역을 중앙에 더 단단히 고정해 재생 호환성을 높입니다.",
-      glueCompression: "트랙 요소들을 한 덩어리로 묶어주는 압축 강도입니다.",
-      autoLevelStrength: "자동 레벨 보정의 개입 정도를 정합니다.",
-      sampleRate: "최종 파일의 샘플레이트입니다. 배포 플랫폼 기준에 맞춰 선택하세요.",
-      bitDepth: "최종 파일의 비트 깊이입니다. 24-bit는 작업용, 16-bit는 배포 호환성이 좋습니다.",
-      dither: "비트 깊이를 낮출 때 생길 수 있는 왜곡을 줄이기 위한 노이즈 처리 방식입니다."
+      targetLufs: "최종 음원의 기준 볼륨(LUFS)을 설정합니다. 유튜브 등 영상 규격인 -14.0 LUFS를 권장합니다.",
+      truePeakCeiling: "소리가 왜곡(클리핑)되지 않도록 막아주는 최상단 안전선입니다. 안전을 위해 통상 -1.0 dBTP를 유지합니다.",
+      outputTrim: "마스터링 처리를 모두 거친 후, 플레이어에 전달되기 직전의 최종 볼륨을 미세 조정합니다.",
+      normalizeLoudness: "여러 트랙의 곡들을 묶을 때, 곡들 사이의 볼륨 차이가 나지 않도록 전체적인 밸런스를 고르게 맞춥니다.",
+      warmth: "사운드에 따뜻하고 아날로그적인 질감을 더합니다. (저역/중음역대 배음 보강)",
+      clarity: "먹먹하거나 거칠게 뭉친 소리를 다듬어 맑고 깨끗하게 만듭니다. (중고역대 정돈)",
+      air: "탁 트인 개방감과 찰랑거리는 공간감을 부여합니다. (초고음역대 확장)",
+      lowEndClean: "웅웅거리는 불필요한 저음을 깎아내어 킥/베이스 사운드를 단단하고 깔끔하게 제어합니다.",
+      stereoWidth: "소리가 양옆으로 퍼지는 폭을 조절하여 더 넓은 무대를 연출합니다.",
+      spaceDepth: "소리가 앞뒤로 위치하는 깊이감을 제어하여 입체적인 공간 규모를 만듭니다.",
+      monoBassAnchor: "저음이 양옆으로 흩어지지 않도록 모노(정중앙)로 묵직하게 잡아줍니다.",
+      glueCompression: "각기 따로 노는 악기 소리들을 하나의 곡처럼 쫀득하게 밀착시킵니다. (다이내믹스 응집)",
+      autoLevelStrength: "전체적인 볼륨 밸런스를 자동으로 맞춰주는 기능이 어느 정도로 개입할지 강도를 설정합니다.",
+      sampleRate: "소리의 해상도를 결정합니다. 영상용(48kHz) 또는 보편적인 음원용(44.1kHz)을 선택하세요.",
+      bitDepth: "소리의 다이내믹 레인지를 결정합니다. 배포 목적지에 맞춰 24-bit 또는 16-bit를 지정합니다.",
+      dither: "비트 해상도를 낮출 때 생기는 디지털 노이즈를, 듣기 좋은 자연스러운 아주 작은 노이즈로 감쪽같이 덮어줍니다."
     }
   },
   en: {
     common: {
-      themeMode:
-        "Theme only changes interface appearance and does not affect loudness or mastering results."
+      themeMode: "Switches the visual display mode. This action does not impact the output signal or mastering pipeline."
     },
     queue: {
-      uploadWav: "Add one or more WAV files to the queue.",
-      processSelected: "Master only the tracks currently selected.",
-      processAll: "Master every track in the queue at once.",
-      statusFilter: "Filter queue rows by processing status.",
-      selectAll: "Toggle selection for every track in the queue.",
-      clearQueue: "Remove all loaded tracks from the queue.",
-      selectTrack: "Include or exclude this track from processing.",
-      setActiveTrack: "Open this track in the A/B monitor.",
-      downloadTrack: "Download this mastered result file.",
-      downloadDoneTracks: "Download all completed mastered files.",
-      removeTrack: "Remove this track from the queue only."
+      uploadWav: "Allocate WAV files to the queue system for analysis and processing.",
+      processSelected: "Initiate mastering routine exclusively on the currently designated track subset.",
+      processAll: "Initiate batch mastering routine across all tracks in the current queue.",
+      statusFilter: "Filter queue displays according to processing status parameters.",
+      selectAll: "Invert selection status uniformly across all queued tracks.",
+      clearQueue: "Purge all track data instances from the queue memory.",
+      selectTrack: "Designate or un-designate this track for mastering operations.",
+      setActiveTrack: "Assign this track to the active channel of the A/B monitoring system.",
+      downloadTrack: "Download the processed master data for this track to the local environment.",
+      downloadDoneTracks: "Compress and sequentially download all processed track data.",
+      removeTrack: "Permanently expel this track from the current system queue."
     },
     ab: {
-      play: "Play whichever source is currently selected: A or B.",
-      stop: "Stop playback and return to the start.",
-      modeA: "Monitor the original source.",
-      modeB: "Monitor the mastered source.",
-      waveSeekOriginal: "Click anywhere on the original waveform to seek.",
-      waveSeekMastered: "Click anywhere on the mastered waveform to seek.",
-      openAb: "Load this finished track into the A/B monitor.",
-      readyListCta: "Visit the portfolio page to discover other projects."
+      play: "Commence playback process for the currently designated source channel (A or B).",
+      stop: "Halt playback process and reset timeline to the 0:00 position.",
+      modeA: "Activate monitoring mode for Channel A (Original Data).",
+      modeB: "Activate monitoring mode for Channel B (Mastered Data).",
+      waveSeekOriginal: "Instantly seek to a specific coordinate within the original waveform.",
+      waveSeekMastered: "Instantly seek to a specific coordinate within the mastered waveform.",
+      openAb: "Allocate the finished track to the central A/B monitor system.",
+      readyListCta: "Access the portfolio page to review supplementary mission logs."
     },
     mastering: {
-      targetLufs:
-        "Average loudness target tuned for YouTube-friendly playback. Starting at -14 LUFS usually avoids over-processing.",
-      truePeakCeiling:
-        "Peak safety ceiling to avoid inter-sample overs after encoding. -1.0 dBTP is a common safe default.",
-      outputTrim: "Fine-adjust final output gain to prevent clipping.",
-      normalizeLoudness: "Keep perceived loudness more consistent across tracks.",
-      warmth: "Adds low-mid body for a warmer tone.",
-      clarity: "Reduces harsh areas for a cleaner, smoother top end.",
-      air: "Adds gentle high-frequency openness.",
-      lowEndClean: "Tightens low-end buildup and improves bass definition.",
-      stereoWidth: "Adjust perceived left-right width.",
-      spaceDepth: "Adjust front-back depth and sense of space.",
-      monoBassAnchor: "Keeps low frequencies centered for better translation.",
-      glueCompression: "How strongly mix elements are glued together.",
-      autoLevelStrength: "How aggressively auto-leveling evens level changes.",
-      sampleRate: "Final output sample rate for export.",
-      bitDepth: "Final output bit depth. 24-bit is production-friendly, 16-bit is distribution-friendly.",
-      dither: "Noise-shaping method used when reducing bit depth."
+      targetLufs: "Set the target loudness parameter (LUFS). The recommended baseline of -14.0 LUFS effectively mitigates system overload.",
+      truePeakCeiling: "Limit the maximum amplitude ceiling for signal peaks. -1.0 dBTP generally functions as the safe threshold.",
+      outputTrim: "Fine-tune output stage gain to systematically prevent clipping during the final delivery phase.",
+      normalizeLoudness: "Calculate and automatically compensate perceived volume variances across all tracks.",
+      warmth: "Supplement low-mid harmonic content to regulate the perceived textural warmth.",
+      clarity: "Suppress unnecessary resonance and harsh frequencies in the upper-mid range to maximize definition.",
+      air: "Open the ultra-high frequency band to expand the spatial resolution of the playback environment.",
+      lowEndClean: "Control excessive low-end buildup and maintain phase separation between kick and bass elements.",
+      stereoWidth: "Adjust the polarity width of the stereo image to reconfigure perceived spatial scale.",
+      spaceDepth: "Modulate reverberation decay parameters to simulate front-to-back distance in the acoustic space.",
+      monoBassAnchor: "Restrict low-frequency phase shifting and lock it to the mono axis to guarantee playback compatibility.",
+      glueCompression: "Regulate the dynamics threshold to reinforce physical cohesion between track components.",
+      autoLevelStrength: "Determine the intervention threshold and intensity of the automated leveling processor.",
+      sampleRate: "Define the output sample rate. 48kHz and 44.1kHz are supported depending on deployment requirements.",
+      bitDepth: "Define the output bit depth. Select either 24-bit or 16-bit pipeline based on the destination target.",
+      dither: "Select the algorithm to suppress quantization noise generated during bit-depth downward conversion."
     }
   }
 };

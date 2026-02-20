@@ -1,5 +1,6 @@
 import {
   MouseEvent,
+  PointerEvent,
   useEffect,
   useMemo,
   useRef,
@@ -10,6 +11,11 @@ import { ScrollArea } from "../../shared/ui/ScrollArea";
 import { useQueue } from "../queue/QueueProvider";
 import type { UiLocale } from "../../shared/i18n/useUiLocale";
 import { getUiTips } from "../../shared/i18n/uiTips";
+
+export const globalVisualizerContext = {
+  analyser: null as AnalyserNode | null,
+  resume: async () => { }
+};
 
 interface ABPlayerPanelProps {
   locale: UiLocale;
@@ -40,6 +46,35 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const hasMastered = Boolean(masteredSrc);
 
   const abReadyTracks = useMemo(() => tracks.filter((track) => track.status === "done"), [tracks]);
+  const visualizerInitRef = useRef(false);
+
+  useEffect(() => {
+    if (visualizerInitRef.current) return;
+    const og = audioOriginalRef.current;
+    const mt = audioMasteredRef.current;
+    if (!og || !mt) return;
+
+    visualizerInitRef.current = true;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioContextClass();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.8;
+
+    const srcOg = ctx.createMediaElementSource(og);
+    const srcMt = ctx.createMediaElementSource(mt);
+
+    srcOg.connect(analyser);
+    srcMt.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    globalVisualizerContext.analyser = analyser;
+    globalVisualizerContext.resume = async () => {
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const originalAudio = audioOriginalRef.current;
@@ -115,6 +150,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     }
 
     try {
+      await globalVisualizerContext.resume();
       await target.play();
       setPlayingMode(mode);
     } catch {
@@ -155,6 +191,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     }
 
     try {
+      await globalVisualizerContext.resume();
       await target.play();
       setPlayingMode(mode);
     } catch {
@@ -162,7 +199,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     }
   };
 
-  const onWaveClick = (event: MouseEvent<HTMLDivElement>, mode: PlaybackMode) => {
+  const onWaveClick = (event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>, mode: PlaybackMode) => {
     const audio = mode === "A" ? audioOriginalRef.current : audioMasteredRef.current;
     const duration = mode === "A" ? durationA : durationB;
     if (!audio || !duration) return;
@@ -209,47 +246,18 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         />
       </div>
 
-      <div className="panel-subhead with-action">
-        <h3>All-track A/B Ready List</h3>
+      <div className="panel-subhead with-action ab-footer-actions">
         <button
           type="button"
-          className="compact-btn has-tooltip"
+          className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.downloadDoneTracks}
           onClick={() => void downloadDoneTracksZip()}
           disabled={abReadyTracks.length === 0}
         >
+          <FiDownload aria-hidden />
           Download All
         </button>
       </div>
-
-      <ScrollArea className="ab-list-scroll">
-        <ul className="ab-track-list">
-          {abReadyTracks.map((track) => (
-            <li
-              key={track.id}
-              className={`ab-track-row ${track.id === activeTrackId ? "is-selected" : ""}`}
-              onClick={() => setActiveTrackId(track.id)}
-            >
-              <span>{track.fileName}</span>
-              <button
-                type="button"
-                className="icon-btn has-tooltip"
-                data-tooltip={tips.queue.downloadTrack}
-                aria-label={`Download ${track.fileName}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  downloadTrack(track.id);
-                }}
-              >
-                <FiDownload aria-hidden />
-              </button>
-            </li>
-          ))}
-          {abReadyTracks.length === 0 ? (
-            <li className="track-empty">A/B ready tracks appear after mastering.</li>
-          ) : null}
-        </ul>
-      </ScrollArea>
 
       <audio
         ref={audioOriginalRef}
@@ -294,7 +302,7 @@ function WaveBlock({
   tooltipSeek: string;
   onTogglePlay: () => void;
   onStop: () => void;
-  onSeek: (event: MouseEvent<HTMLDivElement>) => void;
+  onSeek: (event: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>) => void;
 }) {
   const progress = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0;
   return (
@@ -324,7 +332,15 @@ function WaveBlock({
           role="button"
           tabIndex={0}
           data-tooltip={tooltipSeek}
-          onClick={onSeek}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            onSeek(event);
+          }}
+          onPointerMove={(event) => {
+            if (event.buttons === 1) {
+              onSeek(event);
+            }
+          }}
         >
           <WaveformCanvas peaks={peaks} progress={progress} placeholder={!hasAudio ? "No mastered file yet" : ""} />
         </div>
@@ -365,30 +381,38 @@ function WaveformCanvas({
 
       if (!peaks || peaks.length === 0) {
         ctx.fillStyle = "rgba(120, 129, 141, 0.75)";
-        ctx.font = '12px "Sora", sans-serif';
+        ctx.font = '12px "Inter", sans-serif';
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(placeholder || "Waveform loading...", width / 2, height / 2);
       } else {
         const mid = height / 2;
         const step = width / peaks.length;
-        ctx.strokeStyle = "rgba(56, 69, 86, 0.92)";
-        ctx.lineWidth = Math.max(1, step * 0.8);
-        ctx.beginPath();
+        ctx.lineWidth = Math.max(1, step * 0.75);
+        ctx.lineCap = "round";
+
+        const currentIdx = Math.floor(progress * peaks.length);
+
         for (let i = 0; i < peaks.length; i += 1) {
           const x = i * step + step / 2;
-          const amp = peaks[i] * (height * 0.45);
+          const amp = Math.max(2, peaks[i] * (height * 0.45));
+
+          ctx.beginPath();
+          if (i <= currentIdx) {
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.95)"; // 진행 영역 (라이트/다크 대응 위해 대비가 큰 색, 또는 추후 CSS 변수로)
+          } else {
+            ctx.strokeStyle = "rgba(100, 110, 125, 0.4)"; // 미진행 영역
+          }
           ctx.moveTo(x, mid - amp);
           ctx.lineTo(x, mid + amp);
+          ctx.stroke();
         }
-        ctx.stroke();
       }
 
+      // 재생선 1px 포인터
       const playX = Math.max(0, Math.min(width, width * progress));
-      ctx.fillStyle = "rgba(12, 16, 20, 0.28)";
-      ctx.fillRect(0, 0, playX, height);
-      ctx.fillStyle = "rgba(12, 16, 20, 0.65)";
-      ctx.fillRect(playX - 1, 0, 2, height);
+      ctx.fillStyle = "rgba(220, 50, 50, 0.8)";
+      ctx.fillRect(playX, 0, 1, height);
     };
 
     draw();
