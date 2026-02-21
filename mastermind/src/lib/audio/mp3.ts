@@ -11,16 +11,27 @@ type PendingMp3Request = {
     onProgress?: (percent: number) => void;
 };
 
-let worker: Worker | null = null;
-const pending = new Map<number, PendingMp3Request>();
-let nextId = 1;
+interface WorkerInstance {
+    worker: Worker;
+    busy: boolean;
+    pendingRequests: Map<number, PendingMp3Request>;
+}
 
-function getWorker(): Worker {
-    if (worker) return worker;
+const workerInstances: WorkerInstance[] = [];
+const maxWorkers = Math.min(4, navigator.hardwareConcurrency || 4);
+const taskQueue: (() => void)[] = [];
+let nextRequestId = 1;
 
-    worker = new Worker(
+function initWorker(): WorkerInstance {
+    const worker = new Worker(
         new URL("../../../../web/workers/mp3-worker.js", import.meta.url)
     );
+
+    const instance: WorkerInstance = {
+        worker,
+        busy: false,
+        pendingRequests: new Map()
+    };
 
     worker.onmessage = (event: MessageEvent) => {
         const payload = event.data as {
@@ -32,7 +43,7 @@ function getWorker(): Worker {
             error?: string;
         };
 
-        const request = pending.get(payload.id);
+        const request = instance.pendingRequests.get(payload.id);
         if (!request) return;
 
         if (payload.type === "PROGRESS") {
@@ -40,22 +51,54 @@ function getWorker(): Worker {
             return;
         }
 
-        pending.delete(payload.id);
+        instance.pendingRequests.delete(payload.id);
+        instance.busy = false;
+
         if (payload.success && payload.result) {
             request.resolve(payload.result.mp3Blob);
         } else {
             request.reject(new Error(payload.error || "MP3 encoding failed"));
         }
+
+        processQueue();
     };
 
     worker.onerror = (event) => {
-        for (const req of pending.values()) {
-            req.reject(event.error ?? new Error("MP3 worker error"));
+        const error = event.error ?? new Error("MP3 worker error");
+        for (const req of instance.pendingRequests.values()) {
+            req.reject(error);
         }
-        pending.clear();
+        instance.pendingRequests.clear();
     };
 
-    return worker;
+    workerInstances.push(instance);
+    return instance;
+}
+
+async function getAvailableInstance(): Promise<WorkerInstance> {
+    const freeInstance = workerInstances.find(i => !i.busy);
+    if (freeInstance) return freeInstance;
+
+    if (workerInstances.length < maxWorkers) {
+        return initWorker();
+    }
+
+    return new Promise<WorkerInstance>((resolve) => {
+        taskQueue.push(() => {
+            const idle = workerInstances.find(i => !i.busy);
+            if (idle) resolve(idle);
+        });
+    });
+}
+
+function processQueue() {
+    if (taskQueue.length > 0) {
+        const idle = workerInstances.find(i => !i.busy);
+        if (idle) {
+            const next = taskQueue.shift();
+            if (next) next();
+        }
+    }
 }
 
 /**
@@ -66,15 +109,15 @@ function getWorker(): Worker {
  * @param bitrate      MP3 비트레이트 (128~320)
  * @param onProgress   진행률 콜백 (0~100)
  */
-export function encodeMp3(
+export async function encodeMp3(
     audioBuffer: AudioBuffer,
     bitrate: number = 192,
     onProgress?: (percent: number) => void
 ): Promise<Blob> {
-    const w = getWorker();
-    const numberOfChannels = audioBuffer.numberOfChannels;
+    const instance = await getAvailableInstance();
+    instance.busy = true;
 
-    // Float32Array 채널 데이터를 복사해서 Transferable로 전송
+    const numberOfChannels = audioBuffer.numberOfChannels;
     const channels: Float32Array[] = [];
     const transferables: ArrayBuffer[] = [];
 
@@ -85,11 +128,11 @@ export function encodeMp3(
     }
 
     return new Promise<Blob>((resolve, reject) => {
-        const id = nextId++;
-        pending.set(id, { resolve, reject, onProgress });
+        const id = nextRequestId++;
+        instance.pendingRequests.set(id, { resolve, reject, onProgress });
 
         try {
-            w.postMessage(
+            instance.worker.postMessage(
                 {
                     type: "ENCODE_MP3",
                     id,
@@ -102,8 +145,10 @@ export function encodeMp3(
                 transferables
             );
         } catch (err) {
-            pending.delete(id);
+            instance.pendingRequests.delete(id);
+            instance.busy = false;
             reject(err);
+            processQueue();
         }
     });
 }

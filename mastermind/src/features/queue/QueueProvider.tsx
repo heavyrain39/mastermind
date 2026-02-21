@@ -7,7 +7,7 @@ import {
   useRef,
   useState
 } from "react";
-import JSZip from "jszip";
+import { generateZipInWorker } from "../../lib/audio/zip";
 import { type TrackItem } from "../../shared/types/audio";
 import { type MasteringSettings } from "../../shared/types/mastering";
 import { audioBufferToWavBlob, resampleAudioBuffer } from "../../lib/audio/wav";
@@ -197,33 +197,41 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (doneTracks.length === 0) return;
 
     setIsDownloadingZip(true);
-    const zip = new JSZip();
     const settings = settingsRef.current;
+    const filesToZip: { name: string; data: Blob }[] = [];
 
     try {
-      for (const track of doneTracks) {
-        const fileName = deriveMasteredFileName(track.fileName, settings.outputFormat);
+      // 병렬 MP3 인코딩 처리 (최대 4개)
+      const CONCURRENCY = 4;
+      const queue = [...doneTracks];
+      const filesToZip: { name: string; data: Blob }[] = [];
 
-        let blob: Blob;
-        if (settings.outputFormat === "wav" && track.masteredUrl) {
-          const response = await fetch(track.masteredUrl);
-          blob = await response.blob();
-        } else if (settings.outputFormat === "mp3") {
-          const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
-          blob = await encodeMp3(outputBuffer, settings.mp3Bitrate);
-        } else {
-          const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
-          blob = audioBufferToWavBlob(outputBuffer, { bitDepth: settings.bitDepth, ditherMode: settings.ditherMode });
+      const encodeTask = async () => {
+        while (queue.length > 0) {
+          const track = queue.shift();
+          if (!track) break;
+
+          const fileName = deriveMasteredFileName(track.fileName, settings.outputFormat);
+          let blob: Blob;
+
+          if (settings.outputFormat === "wav" && track.masteredUrl) {
+            const response = await fetch(track.masteredUrl);
+            blob = await response.blob();
+          } else if (settings.outputFormat === "mp3") {
+            const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
+            blob = await encodeMp3(outputBuffer, settings.mp3Bitrate);
+          } else {
+            const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
+            blob = audioBufferToWavBlob(outputBuffer, { bitDepth: settings.bitDepth, ditherMode: settings.ditherMode });
+          }
+
+          filesToZip.push({ name: fileName, data: blob });
         }
+      };
 
-        zip.file(fileName, blob);
-      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, doneTracks.length) }, encodeTask));
 
-      const zipBlob = await zip.generateAsync({
-        type: "blob",
-        compression: "DEFLATE",
-        compressionOptions: { level: 6 }
-      });
+      const zipBlob = await generateZipInWorker(filesToZip);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const zipUrl = URL.createObjectURL(zipBlob);
@@ -265,20 +273,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const selectedSettings = settingsRef.current;
       const workerSettings = toWorkerSettings(selectedSettings);
 
-      for (const trackId of targets) {
-        if (cancelRef.current) {
-          setTracks((prev) =>
-            prev.map((track) =>
-              track.status === "queued"
-                ? { ...track, status: "idle", progressStatus: undefined, progressPercent: undefined }
-                : track
-            )
-          );
-          break;
-        }
+      const CONCURRENCY = 4;
+      const taskQueue = [...targets];
 
+      const processTrack = async (trackId: string) => {
         const sourceTrack = tracksRef.current.find((track) => track.id === trackId);
-        if (!sourceTrack) continue;
+        if (!sourceTrack) return;
 
         setTracks((prev) =>
           prev.map((track) =>
@@ -367,6 +367,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             masteredLufs = normalized.finalLUFS;
           }
 
+          if (cancelRef.current) return;
+
           setTracks((prev) =>
             prev.map((track) =>
               track.id === trackId
@@ -376,7 +378,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           );
 
           const outputBuffer = await resampleAudioBuffer(masteredBuffer, selectedSettings.sampleRate);
-          // 항상 임시 재생용 WAV로 프리뷰 객체를 생성합니다. (UI 프리징 방지 및 빠른 재생)
           const masteredBlob = audioBufferToWavBlob(outputBuffer, {
             bitDepth: selectedSettings.bitDepth,
             ditherMode: selectedSettings.ditherMode
@@ -432,6 +433,27 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             )
           );
         }
+      };
+
+      const workerLoop = async () => {
+        while (taskQueue.length > 0 && !cancelRef.current) {
+          const trackId = taskQueue.shift();
+          if (trackId) {
+            await processTrack(trackId);
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, workerLoop));
+
+      if (cancelRef.current) {
+        setTracks((prev) =>
+          prev.map((track) =>
+            track.status === "queued" || track.status === "processing"
+              ? { ...track, status: "idle", progressStatus: undefined, progressPercent: undefined }
+              : track
+          )
+        );
       }
     } finally {
       setIsProcessing(false);
