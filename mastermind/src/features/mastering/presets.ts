@@ -1,6 +1,7 @@
 import type { MasteringSettings } from "../../shared/types/mastering";
 
 export type MasteringPresetId =
+  | "none"
   | "transparent"
   | "warm-tape"
   | "crystal-air"
@@ -17,6 +18,7 @@ export interface MasteringPresetOption {
 export type FixedPresetId = Exclude<MasteringPresetId, "custom">;
 
 export const MASTERING_PRESET_OPTIONS: MasteringPresetOption[] = [
+  { value: "none", label: "None" },
   { value: "transparent", label: "Transparent" },
   { value: "warm-tape", label: "Warm Tape" },
   { value: "crystal-air", label: "Crystal Air" },
@@ -29,6 +31,26 @@ export const MASTERING_PRESET_OPTIONS: MasteringPresetOption[] = [
 export const DEFAULT_PRESET_ID: FixedPresetId = "transparent";
 
 export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
+  none: {
+    targetLufs: -14,
+    truePeakCeiling: -1,
+    outputTrimDb: 0,
+    normalizeLoudness: true,
+    warmth: 0,
+    clarity: 0,
+    air: 0,
+    lowEndClean: 0,
+    stereoWidth: 100,
+    spaceDepth: 0,
+    monoBassAnchor: false,
+    glueCompression: 0,
+    autoLevelStrength: 0,
+    sampleRate: 48000,
+    bitDepth: 24,
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
+  },
   transparent: {
     targetLufs: -14,
     truePeakCeiling: -1,
@@ -45,7 +67,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 18,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   },
   "warm-tape": {
     targetLufs: -14,
@@ -63,7 +87,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 22,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   },
   "crystal-air": {
     targetLufs: -14,
@@ -81,7 +107,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 12,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   },
   "punch-glue": {
     targetLufs: -12,
@@ -99,7 +127,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 50,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   },
   "wide-cinema": {
     targetLufs: -16,
@@ -117,7 +147,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 15,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   },
   "loud-clear": {
     targetLufs: -11,
@@ -135,7 +167,9 @@ export const PRESET_SETTINGS: Record<FixedPresetId, MasteringSettings> = {
     autoLevelStrength: 40,
     sampleRate: 48000,
     bitDepth: 24,
-    ditherMode: "none"
+    ditherMode: "none",
+    outputFormat: "wav",
+    mp3Bitrate: 192
   }
 };
 

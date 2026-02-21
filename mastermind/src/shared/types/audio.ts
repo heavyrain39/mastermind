@@ -18,4 +18,5 @@ export interface TrackItem {
   progressPercent?: number;
   progressStatus?: string;
   errorMessage?: string;
+  masteredBuffer?: AudioBuffer;
 }

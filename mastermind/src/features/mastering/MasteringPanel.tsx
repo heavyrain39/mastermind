@@ -25,6 +25,18 @@ const ditherOptions: Array<{ value: DitherMode; label: string }> = [
   { value: "noise-shaped", label: "Noise-shaped" }
 ];
 
+const formatOptions = [
+  { value: "wav", label: "WAV" },
+  { value: "mp3", label: "MP3" }
+];
+
+const mp3BitrateOptions = [
+  { value: "128", label: "128 kbps" },
+  { value: "192", label: "192 kbps" },
+  { value: "256", label: "256 kbps" },
+  { value: "320", label: "320 kbps" }
+];
+
 interface MasteringPanelProps {
   locale: UiLocale;
 }
@@ -163,6 +175,12 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           <h3>Output Format</h3>
           <div className="output-format-row">
             <InlineDropdown
+              label="Format"
+              value={masteringSettings.outputFormat}
+              options={formatOptions}
+              onChange={(next) => updateMasteringSettings({ outputFormat: next as "wav" | "mp3" })}
+            />
+            <InlineDropdown
               label="Sample Rate"
               value={String(masteringSettings.sampleRate)}
               options={sampleRateOptions}
@@ -170,20 +188,35 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
                 updateMasteringSettings({ sampleRate: next === "44100" ? 44100 : 48000 })
               }
               tooltip={tips.mastering.sampleRate}
+              tooltipPosition="left"
             />
-            <InlineDropdown
-              label="Bit Depth"
-              value={String(masteringSettings.bitDepth)}
-              options={bitDepthOptions}
-              onChange={(next) => updateMasteringSettings({ bitDepth: next === "16" ? 16 : 24 })}
-              tooltip={tips.mastering.bitDepth}
-            />
+            {masteringSettings.outputFormat === "mp3" ? (
+              <InlineDropdown
+                label="Bitrate"
+                value={String(masteringSettings.mp3Bitrate)}
+                options={mp3BitrateOptions}
+                onChange={(next) =>
+                  updateMasteringSettings({ mp3Bitrate: Number(next) as any })
+                }
+                tooltipPosition="left"
+              />
+            ) : (
+              <InlineDropdown
+                label="Bit Depth"
+                value={String(masteringSettings.bitDepth)}
+                options={bitDepthOptions}
+                onChange={(next) => updateMasteringSettings({ bitDepth: next === "16" ? 16 : 24 })}
+                tooltip={tips.mastering.bitDepth}
+                tooltipPosition="left"
+              />
+            )}
             <InlineDropdown
               label="Dither"
               value={masteringSettings.ditherMode}
               options={ditherOptions}
               onChange={(next) => updateMasteringSettings({ ditherMode: next as DitherMode })}
               tooltip={tips.mastering.dither}
+              tooltipPosition="left"
             />
           </div>
         </section>
@@ -307,16 +340,23 @@ function InlineDropdown({
   value,
   options,
   onChange,
-  tooltip
+  tooltip,
+  tooltipPosition
 }: {
   label: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (next: string) => void;
-  tooltip: string;
+  tooltip?: string;
+  tooltipPosition?: "bottom" | "left";
 }) {
+  const className = `inline-field compact${tooltip ? " has-tooltip" : ""}`;
   return (
-    <div className="inline-field compact has-tooltip" data-tooltip={tooltip}>
+    <div
+      className={className}
+      data-tooltip={tooltip}
+      data-tooltip-position={tooltipPosition}
+    >
       <span>{label}</span>
       <Dropdown ariaLabel={label} value={value} options={options} onChange={onChange} />
     </div>

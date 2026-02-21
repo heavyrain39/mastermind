@@ -17,6 +17,8 @@ export interface MasteringSettings {
   sampleRate: 44100 | 48000;
   bitDepth: 16 | 24;
   ditherMode: DitherMode;
+  outputFormat: "wav" | "mp3";
+  mp3Bitrate: 128 | 192 | 256 | 320;
   presetId?: string;
 }
 

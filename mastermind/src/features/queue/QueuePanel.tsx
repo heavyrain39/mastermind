@@ -25,7 +25,9 @@ export function QueuePanel({ locale }: QueuePanelProps) {
     removeTrack,
     processSelectedTracks,
     cancelProcessing,
-    downloadTrack
+    downloadTrack,
+    downloadingTrackIds,
+    downloadProgress
   } = useQueue();
 
   const selectedCount = useMemo(
@@ -41,6 +43,27 @@ export function QueuePanel({ locale }: QueuePanelProps) {
       toggleAllRef.current.indeterminate = partiallySelected;
     }
   }, [partiallySelected]);
+
+  const totalCount = tracks.length;
+  const doneCount = tracks.filter((t) => t.status === "done").length;
+  const errorCount = tracks.filter((t) => t.status === "error").length;
+
+  const hasStarted = tracks.some(
+    (t) => t.status === "processing" || t.status === "queued" || t.status === "done" || t.status === "error"
+  );
+
+  const totalProgressPercent = useMemo(() => {
+    if (totalCount === 0) return 0;
+    let accumulated = 0;
+    tracks.forEach((t) => {
+      if (t.status === "done" || t.status === "error") {
+        accumulated += 100;
+      } else if (t.status === "processing" && typeof t.progressPercent === "number") {
+        accumulated += t.progressPercent;
+      }
+    });
+    return accumulated / totalCount;
+  }, [tracks, totalCount]);
 
   const onClickUpload = () => {
     inputRef.current?.click();
@@ -91,25 +114,42 @@ export function QueuePanel({ locale }: QueuePanelProps) {
         Drop audio files here (WAV · MP3 · M4A · OGG · FLAC)
       </div>
 
-      <div className="queue-actions">
-        <button
-          type="button"
-          onClick={onClickUpload}
-          disabled={isProcessing}
-          className="primary-action-btn has-tooltip"
-          data-tooltip={tips.queue.uploadWav}
-        >
-          Upload
-        </button>
-        <button
-          type="button"
-          onClick={isProcessing ? cancelProcessing : processSelectedTracks}
-          disabled={!isProcessing && selectedCount === 0}
-          className="primary-action-btn has-tooltip"
-          data-tooltip={isProcessing ? "Stop processing" : tips.queue.processSelected}
-        >
-          {isProcessing ? "Stop" : "Start"}
-        </button>
+      <div className="queue-controls-section">
+        <div className="queue-actions">
+          <button
+            type="button"
+            onClick={onClickUpload}
+            disabled={isProcessing}
+            className="primary-action-btn has-tooltip"
+            data-tooltip={tips.queue.uploadWav}
+          >
+            Upload
+          </button>
+          <button
+            type="button"
+            onClick={isProcessing ? cancelProcessing : processSelectedTracks}
+            disabled={!isProcessing && selectedCount === 0}
+            className="primary-action-btn has-tooltip"
+            data-tooltip={isProcessing ? "Stop processing" : tips.queue.processSelected}
+          >
+            {isProcessing ? "Stop" : "Start"}
+          </button>
+        </div>
+
+        {hasStarted && (
+          <div className="global-progress-wrap">
+            <div className="global-progress-text">
+              <span>{doneCount + errorCount} / {totalCount} tracks done.</span>
+              <span>({Math.min(100, Math.max(0, Math.round(totalProgressPercent)))}%)</span>
+            </div>
+            <div className="global-progress-track">
+              <div
+                className="global-progress-fill"
+                style={{ width: `${Math.min(100, Math.max(0, totalProgressPercent))}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="queue-list-head">
@@ -155,12 +195,17 @@ export function QueuePanel({ locale }: QueuePanelProps) {
                     className="icon-btn has-tooltip"
                     data-tooltip={tips.queue.downloadTrack}
                     aria-label={`Download ${track.fileName}`}
+                    disabled={downloadingTrackIds.includes(track.id)}
                     onClick={(event) => {
                       event.stopPropagation();
                       downloadTrack(track.id);
                     }}
                   >
-                    <FiDownload aria-hidden />
+                    {downloadingTrackIds.includes(track.id) ? (
+                      <span className="spinner" aria-hidden />
+                    ) : (
+                      <FiDownload aria-hidden />
+                    )}
                   </button>
                 ) : null}
                 <button
@@ -174,14 +219,32 @@ export function QueuePanel({ locale }: QueuePanelProps) {
                   <FiTrash2 aria-hidden />
                 </button>
               </div>
-              {typeof track.progressPercent === "number" && track.status === "processing" ? (
-                <div className="track-progress wide">
-                  <div
-                    className="track-progress-fill"
-                    style={{ width: `${Math.max(0, Math.min(100, track.progressPercent))}%` }}
-                  />
-                </div>
-              ) : null}
+              {(() => {
+                const encodingPct = downloadProgress.get(track.id);
+                const isEncoding = typeof encodingPct === "number";
+                const isProcessingTrack = typeof track.progressPercent === "number" && track.status === "processing";
+                if (isEncoding) {
+                  return (
+                    <div className="track-progress wide">
+                      <div
+                        className="track-progress-fill"
+                        style={{ width: `${Math.max(0, Math.min(100, encodingPct))}%` }}
+                      />
+                    </div>
+                  );
+                }
+                if (isProcessingTrack) {
+                  return (
+                    <div className="track-progress wide">
+                      <div
+                        className="track-progress-fill"
+                        style={{ width: `${Math.max(0, Math.min(100, track.progressPercent!))}%` }}
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               {track.status === "error" && track.errorMessage ? (
                 <div className="track-error">{track.errorMessage}</div>
               ) : null}

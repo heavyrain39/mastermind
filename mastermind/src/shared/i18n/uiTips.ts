@@ -46,6 +46,7 @@ export interface UiTips {
     dither: string;
   };
   presets: {
+    none: string;
     transparent: string;
     "warm-tape": string;
     "crystal-air": string;
@@ -103,6 +104,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       dither: "비트 해상도를 낮출 때 생기는 디지털 노이즈를, 듣기 좋은 자연스러운 아주 작은 노이즈로 감쪽같이 덮어줍니다."
     },
     presets: {
+      none: "음원에 일절 손을 대지 않고, 볼륨(LUFS)만 목표치에 맞춰 정규화합니다.",
       transparent: "원본의 밸런스를 최대한 존중하며, 볼륨 정규화와 최소한의 보정만 적용합니다.",
       "warm-tape": "아날로그 테이프의 따뜻한 질감을 재현합니다. 저중역 배음을 보강하고 고역을 부드럽게 다듬습니다.",
       "crystal-air": "초고역 확장과 맑은 결을 우선시합니다. 개방감 있고 선명한 사운드를 원할 때 적합합니다.",
@@ -158,6 +160,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       dither: "Select the algorithm to suppress quantization noise generated during bit-depth downward conversion."
     },
     presets: {
+      none: "Applies no tonal or dynamic processing at all. Only normalizes volume to the target LUFS.",
       transparent: "Respects the original balance with minimal intervention. Applies loudness normalization and subtle correction only.",
       "warm-tape": "Recreates the warm texture of analog tape. Enhances low-mid harmonics and gently rolls off the highs.",
       "crystal-air": "Prioritizes ultra-high extension and pristine clarity. Ideal for open, sparkling sonic landscapes.",

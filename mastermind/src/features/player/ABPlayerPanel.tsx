@@ -27,8 +27,7 @@ type PlaybackMode = "A" | "B";
 const WAVE_BINS = 360;
 
 export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
-  const { tracks, activeTrack, activeTrackId, setActiveTrackId, downloadTrack, downloadDoneTracksZip } = useQueue();
-  const [isZipping, setIsZipping] = useState(false);
+  const { tracks, activeTrack, activeTrackId, setActiveTrackId, downloadTrack, downloadDoneTracksZip, isDownloadingZip } = useQueue();
   const [playingMode, setPlayingMode] = useState<PlaybackMode | null>(null);
   const [currentTimeA, setCurrentTimeA] = useState(0);
   const [currentTimeB, setCurrentTimeB] = useState(0);
@@ -254,17 +253,13 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
           type="button"
           className="primary-action-btn has-tooltip"
           data-tooltip={tips.queue.downloadDoneTracks}
+          data-tooltip-position="top"
           onClick={async () => {
-            setIsZipping(true);
-            try {
-              await downloadDoneTracksZip();
-            } finally {
-              setIsZipping(false);
-            }
+            await downloadDoneTracksZip();
           }}
-          disabled={abReadyTracks.length === 0 || isZipping}
+          disabled={abReadyTracks.length === 0 || isDownloadingZip}
         >
-          {isZipping ? (
+          {isDownloadingZip ? (
             <span className="spinner" />
           ) : (
             <>

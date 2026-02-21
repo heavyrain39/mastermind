@@ -1598,7 +1598,7 @@ self.onmessage = async (e) => {
         sendProgress(id, 0.60, 'Applying final filters...');
         buffer = applyFinalFilters(buffer, {
           highpass: !!settings.cleanLowEnd,
-          lowpass: true
+          lowpass: settings.presetId !== 'none'
         });
 
         // 6. EQ (5-Band) + Cut Mud

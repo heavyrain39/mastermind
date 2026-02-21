@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-type TooltipPosition = "bottom" | "left";
+type TooltipPosition = "bottom" | "left" | "top";
 
 interface TooltipState {
   text: string;
@@ -36,7 +36,11 @@ export function TooltipLayer() {
       if (position === "left") {
         x = rect.left - 12;
         y = rect.top + rect.height / 2;
+      } else if (position === "top") {
+        x = Math.min(window.innerWidth - PADDING, Math.max(PADDING, rect.left + rect.width / 2));
+        y = rect.top - 10;
       } else {
+        // Default "bottom" with auto-flip
         const preferredY = rect.bottom + 10;
         const fallbackY = rect.top - 10;
         const viewportHeight = window.innerHeight;
@@ -89,6 +93,7 @@ export function TooltipLayer() {
   }, []);
 
   const isLeft = tooltip.position === "left";
+  const isTop = tooltip.position === "top";
 
   const style = useMemo(
     () => ({
@@ -97,10 +102,12 @@ export function TooltipLayer() {
       opacity: tooltip.visible ? 1 : 0,
       transform: isLeft
         ? `translate(-100%, -50%) translateX(${tooltip.visible ? "0" : "4px"})`
-        : `translate(-50%, ${tooltip.visible ? "0" : "4px"})`,
+        : isTop
+          ? `translate(-50%, -100%) translateY(${tooltip.visible ? "0" : "-4px"})`
+          : `translate(-50%, ${tooltip.visible ? "0" : "4px"})`,
       maxWidth: isLeft ? "380px" : "320px"
     }),
-    [tooltip, isLeft]
+    [tooltip, isLeft, isTop]
   );
 
   return (
