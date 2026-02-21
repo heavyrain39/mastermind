@@ -1,44 +1,6 @@
-# Dependencies
-node_modules/
-**/node_modules/
-.pnpm-store/
-.npm/
-
-# Build output
-dist/
-dist-electron/
-web/dist/
-web/dist-electron/
-mastermind/dist/
-mastermind/dist-electron/
-out/
-public/
-release/
-reference/
-coverage/
-*.tsbuildinfo
-
-# Electron-builder artifacts
-*.exe
-*.dmg
-*.AppImage
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
+node_modules
+dist
 *.log
-.cache/
-.tmp/
-tmp/
-temp/
-*.zip
-*.wav
-.vite/
-.vscode/
-
-# Environment files
-.env
-.env.*
-!.env.example
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
