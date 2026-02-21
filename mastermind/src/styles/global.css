@@ -876,12 +876,13 @@ a {
 
 .control-row,
 .toggle-row {
-  padding: 8px 10px;
-  min-height: 32px;
+  padding: 0 10px;
+  height: 32px;
   display: flex;
   align-items: center;
   border-bottom: 1px dashed var(--line);
   transition: background 150ms ease;
+  box-sizing: border-box;
 }
 
 .control-row:hover,
@@ -904,10 +905,10 @@ a {
 
 .toggle-row.compact {
   display: flex;
-  /* Changed to flex for better label expansion */
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .control-label {
@@ -988,6 +989,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
   cursor: pointer;
   position: relative;
   transition: all 120ms ease;
+  justify-self: end;
+  margin: 0;
 }
 
 .toggle-row input[type="checkbox"]:checked {
