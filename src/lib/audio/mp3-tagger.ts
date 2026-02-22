@@ -5,103 +5,132 @@ import type { IAudioMetadata } from "music-metadata-browser";
  * Generates an ID3v2.3 tag buffer that can be prepended to an MP3 file.
  */
 export function generateID3v2Tag(metadata: IAudioMetadata | undefined): Uint8Array {
-    if (!metadata || !metadata.common) return new Uint8Array(0);
+  if (!metadata?.common) return new Uint8Array(0);
 
-    const common = metadata.common;
-    const frames: { id: string; body: Uint8Array }[] = [];
+  const common = metadata.common;
+  const frames: Uint8Array[] = [];
 
-    // Helper to create a text frame (TIT2, TPE1, etc.)
-    const createTextFrame = (id: string, text: string | undefined) => {
-        if (!text) return null;
+  const primaryArtist = firstNonEmpty(common.artist, common.artists?.[0], common.albumartist);
+  const title = firstNonEmpty(common.title);
+  const album = firstNonEmpty(common.album);
+  const year = typeof common.year === "number" ? String(common.year) : undefined;
+  const genre = common.genre?.[0];
 
-        // For ID3v2.3, we use encoding 1 (UTF-16 with BOM).
-        const BOM = [0xFF, 0xFE]; // Little Endian BOM
-        const encodedText: number[] = [];
-        for (let i = 0; i < text.length; i++) {
-            const code = text.charCodeAt(i);
-            encodedText.push(code & 0xFF);
-            encodedText.push((code >> 8) & 0xFF);
-        }
+  pushTextFrame(frames, "TIT2", title);
+  pushTextFrame(frames, "TPE1", primaryArtist);
+  pushTextFrame(frames, "TALB", album);
+  pushTextFrame(frames, "TYER", year);
+  pushTextFrame(frames, "TCON", genre);
 
-        const body = new Uint8Array([1, ...BOM, ...encodedText]); // 1 = UTF-16
-        return { id, body };
-    };
+  const picture = common.picture?.[0];
+  if (picture?.data && picture.data.length > 0) {
+    frames.push(createApicFrame(picture.format, picture.data));
+  }
 
-    const titleFrame = createTextFrame("TIT2", common.title);
-    if (titleFrame) frames.push(titleFrame);
+  if (frames.length === 0) return new Uint8Array(0);
 
-    const artistFrame = createTextFrame("TPE1", common.artist);
-    if (artistFrame) frames.push(artistFrame);
+  const framesSize = frames.reduce((sum, frame) => sum + frame.length, 0);
+  const tagBuffer = new Uint8Array(10 + framesSize);
 
-    const albumFrame = createTextFrame("TALB", common.album);
-    if (albumFrame) frames.push(albumFrame);
+  // ID3 header: "ID3", version 2.3.0, flags 0
+  tagBuffer.set([0x49, 0x44, 0x33, 0x03, 0x00, 0x00], 0);
+  tagBuffer.set(toSynchsafe(framesSize), 6);
 
-    const yearFrame = createTextFrame("TYER", common.year ? String(common.year) : undefined);
-    if (yearFrame) frames.push(yearFrame);
+  let offset = 10;
+  for (const frame of frames) {
+    tagBuffer.set(frame, offset);
+    offset += frame.length;
+  }
 
-    if (common.genre && common.genre[0]) {
-        const genreFrame = createTextFrame("TCON", common.genre[0]);
-        if (genreFrame) frames.push(genreFrame);
-    }
+  return tagBuffer;
+}
 
-    // Handle Artwork (APIC)
-    if (common.picture && common.picture[0]) {
-        const pic = common.picture[0];
-        const mimeType = pic.format || "image/jpeg";
-        const mimeEncoded = new TextEncoder().encode(mimeType);
+function pushTextFrame(target: Uint8Array[], id: string, value: string | undefined) {
+  const clean = cleanText(value);
+  if (!clean) return;
+  target.push(createFrame(id, encodeUtf16WithBomAndTerminator(clean)));
+}
 
-        const headerSize = 1 + mimeEncoded.length + 1 + 1 + 1;
-        const body = new Uint8Array(headerSize + pic.data.length);
-        let pos = 0;
-        body[pos++] = 0; // ISO-8859-1 for mime/desc
-        body.set(mimeEncoded, pos);
-        pos += mimeEncoded.length;
-        body[pos++] = 0; // Null terminator for mime
-        body[pos++] = 3; // Cover (front)
-        body[pos++] = 0; // Null terminator for description
-        body.set(pic.data, pos);
+function cleanText(value: string | undefined) {
+  if (!value) return undefined;
+  const trimmed = value.replace(/\u0000/g, "").trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
 
-        frames.push({ id: "APIC", body });
-    }
+function firstNonEmpty(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const clean = cleanText(value);
+    if (clean) return clean;
+  }
+  return undefined;
+}
 
-    if (frames.length === 0) return new Uint8Array(0);
+function encodeUtf16WithBomAndTerminator(text: string) {
+  // Text encoding byte 0x01 means UTF-16 with BOM in ID3v2.3.
+  const body = new Uint8Array(1 + 2 + text.length * 2 + 2);
+  let offset = 0;
+  body[offset++] = 0x01;
+  body[offset++] = 0xff;
+  body[offset++] = 0xfe; // UTF-16LE BOM
 
-    // Calculate total frames size
-    let framesSize = 0;
-    frames.forEach(f => {
-        framesSize += 10 + f.body.length; // 10 bytes header per frame
-    });
+  for (let i = 0; i < text.length; i += 1) {
+    const codeUnit = text.charCodeAt(i);
+    body[offset++] = codeUnit & 0xff;
+    body[offset++] = (codeUnit >> 8) & 0xff;
+  }
 
-    // ID3v2 Header (10 bytes)
-    const tagBuffer = new Uint8Array(10 + framesSize);
-    tagBuffer.set([0x49, 0x44, 0x33, 0x03, 0x00, 0x00]); // ID3v2.3.0
+  // Explicit UTF-16 terminator
+  body[offset++] = 0x00;
+  body[offset++] = 0x00;
+  return body;
+}
 
-    // Synchsafe integer (7 bits per byte)
-    const sizeBytes = [
-        (framesSize >> 21) & 0x7F,
-        (framesSize >> 14) & 0x7F,
-        (framesSize >> 7) & 0x7F,
-        framesSize & 0x7F
-    ];
-    tagBuffer.set(sizeBytes, 6);
+function createApicFrame(format: string | undefined, imageData: Uint8Array) {
+  const mimeType = (format && format.trim().length > 0) ? format.trim() : "image/jpeg";
+  const mimeBytes = new TextEncoder().encode(mimeType);
+  const description = new Uint8Array([0x00]); // ISO-8859-1 empty string terminator
 
-    let offset = 10;
-    frames.forEach(f => {
-        // Frame Header: ID (4) + Size (4) + Flags (2)
-        for (let i = 0; i < 4; i++) tagBuffer[offset + i] = f.id.charCodeAt(i);
+  // APIC body:
+  // [text-encoding(1)] [MIME + 0x00] [picture-type(1)] [description + 0x00] [binary image]
+  const body = new Uint8Array(1 + mimeBytes.length + 1 + 1 + description.length + imageData.length);
+  let offset = 0;
+  body[offset++] = 0x00; // ISO-8859-1 for APIC text fields
+  body.set(mimeBytes, offset);
+  offset += mimeBytes.length;
+  body[offset++] = 0x00;
+  body[offset++] = 0x03; // front cover
+  body.set(description, offset);
+  offset += description.length;
+  body.set(imageData, offset);
 
-        // Frame size is NOT synchsafe in ID3v2.3 (only V2.4)
-        tagBuffer[offset + 4] = (f.body.length >> 24) & 0xFF;
-        tagBuffer[offset + 5] = (f.body.length >> 16) & 0xFF;
-        tagBuffer[offset + 6] = (f.body.length >> 8) & 0xFF;
-        tagBuffer[offset + 7] = f.body.length & 0xFF;
+  return createFrame("APIC", body);
+}
 
-        tagBuffer[offset + 8] = 0; // Flags
-        tagBuffer[offset + 9] = 0;
+function createFrame(id: string, body: Uint8Array) {
+  const frame = new Uint8Array(10 + body.length);
+  frame[0] = id.charCodeAt(0);
+  frame[1] = id.charCodeAt(1);
+  frame[2] = id.charCodeAt(2);
+  frame[3] = id.charCodeAt(3);
 
-        tagBuffer.set(f.body, offset + 10);
-        offset += 10 + f.body.length;
-    });
+  // ID3v2.3 frame size is a regular 32-bit big-endian integer (not synchsafe).
+  frame[4] = (body.length >> 24) & 0xff;
+  frame[5] = (body.length >> 16) & 0xff;
+  frame[6] = (body.length >> 8) & 0xff;
+  frame[7] = body.length & 0xff;
 
-    return tagBuffer;
+  // Frame flags (status/format): all zero.
+  frame[8] = 0x00;
+  frame[9] = 0x00;
+  frame.set(body, 10);
+  return frame;
+}
+
+function toSynchsafe(size: number): [number, number, number, number] {
+  return [
+    (size >> 21) & 0x7f,
+    (size >> 14) & 0x7f,
+    (size >> 7) & 0x7f,
+    size & 0x7f
+  ];
 }

@@ -127,17 +127,24 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setTracks((prev) => [...prev, ...createdTracks]);
     setActiveTrackIdState((prev) => prev ?? createdTracks[0]?.id ?? null);
 
-    // 비동기 메타데이터 추출
-    createdTracks.forEach(async (track) => {
-      try {
-        const metadata = await mmb.parseBlob(track.sourceFile);
-        setTracks((prev) =>
-          prev.map((t) => (t.id === track.id ? { ...t, metadata } : t))
-        );
-      } catch (err) {
-        console.warn(`[Metadata] Failed to extract for ${track.fileName}:`, err);
-      }
+    // 비동기 메타데이터 추출 (Background pre-cache)
+    createdTracks.forEach((track) => {
+      void ensureMetadata(track);
     });
+  };
+
+  const ensureMetadata = async (track: TrackItem) => {
+    if (track.metadata) return track.metadata;
+    try {
+      const metadata = await mmb.parseBlob(track.sourceFile);
+      setTracks((prev) =>
+        prev.map((t) => (t.id === track.id ? { ...t, metadata } : t))
+      );
+      return metadata;
+    } catch (err) {
+      console.warn(`[Metadata] Failed to extract for ${track.fileName}:`, err);
+      return undefined;
+    }
   };
 
   const clearQueue = () => {
@@ -177,6 +184,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setDownloadProgress((prev) => { const next = new Map(prev); next.set(trackId, 0); return next; });
 
     try {
+      const metadata = await ensureMetadata(target);
       if (settings.outputFormat === "wav") {
         triggerDownload(
           target.masteredUrl,
@@ -188,7 +196,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const outputBuffer = await resampleAudioBuffer(target.masteredBuffer, settings.sampleRate);
       const mp3Blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, (percent) => {
         setDownloadProgress((prev) => { const next = new Map(prev); next.set(trackId, percent); return next; });
-      }, target.metadata);
+      }, metadata);
       const url = URL.createObjectURL(mp3Blob);
 
       triggerDownload(
@@ -231,11 +239,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             const response = await fetch(track.masteredUrl);
             blob = await response.blob();
           } else if (settings.outputFormat === "mp3") {
+            const trackMetadata = await ensureMetadata(track);
             const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
-            blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, undefined, track.metadata);
+            blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, undefined, trackMetadata);
           } else {
+            const trackMetadata = await ensureMetadata(track);
             const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
-            blob = audioBufferToWavBlob(outputBuffer, { bitDepth: settings.bitDepth, ditherMode: settings.ditherMode });
+            blob = audioBufferToWavBlob(outputBuffer, { bitDepth: settings.bitDepth, ditherMode: settings.ditherMode, metadata: trackMetadata });
           }
 
           filesToZip.push({ name: fileName, data: blob });
@@ -308,6 +318,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         );
 
         try {
+          const trackMetadata = await ensureMetadata(sourceTrack);
           const decodedBuffer = await decodeFileToAudioBuffer(sourceTrack.sourceFile, decodeContext);
           const originalBuffer = ensureStereoBuffer(decodedBuffer);
 
@@ -394,7 +405,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const masteredBlob = audioBufferToWavBlob(outputBuffer, {
             bitDepth: selectedSettings.bitDepth,
             ditherMode: selectedSettings.ditherMode,
-            metadata: sourceTrack.metadata
+            metadata: trackMetadata
           });
           const nextMasteredUrl = URL.createObjectURL(masteredBlob);
           const nextFileName = deriveMasteredFileName(
