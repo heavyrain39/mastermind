@@ -34,29 +34,30 @@ export function encodeAudioBufferToWav(
   const dataSize = length * numberOfChannels * bytesPerSample;
 
   // Metadata (RIFF LIST INFO + optional ID3 chunk)
-  const infoTags: { id: string; value: string }[] = [];
+  const textEncoder = new TextEncoder();
+  const infoTags: { id: string; encoded: Uint8Array }[] = [];
   if (metadata?.common) {
     const info = metadata.common;
-    const title = toAsciiInfoText(info.title);
-    const artist = toAsciiInfoText(info.artist ?? info.artists?.[0] ?? info.albumartist);
-    const album = toAsciiInfoText(info.album);
+    const title = cleanInfoText(info.title);
+    const artist = cleanInfoText(info.artist ?? info.artists?.[0] ?? info.albumartist);
+    const album = cleanInfoText(info.album);
     const year = typeof info.year === "number" ? String(info.year) : undefined;
-    const genre = toAsciiInfoText(info.genre?.[0]);
-    const comment = toAsciiInfoText(info.comment?.[0]);
+    const genre = cleanInfoText(info.genre?.[0]);
+    const comment = cleanInfoText(info.comment?.[0]);
 
-    if (title) infoTags.push({ id: "INAM", value: title });
-    if (artist) infoTags.push({ id: "IART", value: artist });
-    if (album) infoTags.push({ id: "IPRD", value: album });
-    if (year) infoTags.push({ id: "ICRD", value: year });
-    if (genre) infoTags.push({ id: "IGNR", value: genre });
-    if (comment) infoTags.push({ id: "ICMT", value: comment });
+    if (title) infoTags.push({ id: "INAM", encoded: textEncoder.encode(title) });
+    if (artist) infoTags.push({ id: "IART", encoded: textEncoder.encode(artist) });
+    if (album) infoTags.push({ id: "IPRD", encoded: textEncoder.encode(album) });
+    if (year) infoTags.push({ id: "ICRD", encoded: textEncoder.encode(year) });
+    if (genre) infoTags.push({ id: "IGNR", encoded: textEncoder.encode(genre) });
+    if (comment) infoTags.push({ id: "ICMT", encoded: textEncoder.encode(comment) });
   }
 
   let listSize = 0;
   if (infoTags.length > 0) {
     listSize = 4 + 8; // 'INFO' + 'LIST' header
     for (const tag of infoTags) {
-      const valLen = tag.value.length + 1;
+      const valLen = tag.encoded.length + 1; // UTF-8 bytes + null terminator
       const paddedLen = valLen + (valLen % 2);
       listSize += 8 + paddedLen;
     }
@@ -87,48 +88,7 @@ export function encodeAudioBufferToWav(
 
   let offset = 36;
 
-  // Write Metadata (LIST INFO) - Usually placed before data for better compatibility
-  if (infoTags.length > 0) {
-    writeString(view, offset, "LIST");
-    view.setUint32(offset + 4, listSize - 8, true);
-    writeString(view, offset + 8, "INFO");
-    offset += 12;
-
-    for (const tag of infoTags) {
-      writeString(view, offset, tag.id);
-      const valLen = tag.value.length + 1;
-      view.setUint32(offset + 4, valLen, true);
-      offset += 8;
-      for (let i = 0; i < tag.value.length; i++) {
-        view.setUint8(offset + i, tag.value.charCodeAt(i));
-      }
-      view.setUint8(offset + tag.value.length, 0); // null terminator
-      offset += valLen;
-      if (valLen % 2 !== 0) {
-        view.setUint8(offset, 0); // padding
-        offset += 1;
-      }
-    }
-  }
-
-  // Write ID3 chunk for Unicode text and artwork support.
-  if (id3ChunkPayloadSize > 0) {
-    writeString(view, offset, "id3 ");
-    view.setUint32(offset + 4, id3Data.length, true);
-    offset += 8;
-
-    for (let i = 0; i < id3Data.length; i += 1) {
-      view.setUint8(offset + i, id3Data[i]);
-    }
-    offset += id3Data.length;
-
-    if (id3Data.length % 2 !== 0) {
-      view.setUint8(offset, 0);
-      offset += 1;
-    }
-  }
-
-  // data chunk
+  // data chunk — must come before metadata for Windows Explorer compatibility
   writeString(view, offset, "data");
   view.setUint32(offset + 4, dataSize, true);
   offset += 8;
@@ -170,6 +130,47 @@ export function encodeAudioBufferToWav(
         view.setUint8(offset + 2, (integerSample >> 16) & 0xff);
         offset += 3;
       }
+    }
+  }
+
+  // Write metadata chunks after audio data (Windows Explorer requires this ordering)
+  if (infoTags.length > 0) {
+    writeString(view, offset, "LIST");
+    view.setUint32(offset + 4, listSize - 8, true);
+    writeString(view, offset + 8, "INFO");
+    offset += 12;
+
+    for (const tag of infoTags) {
+      writeString(view, offset, tag.id);
+      const valLen = tag.encoded.length + 1; // UTF-8 bytes + null terminator
+      view.setUint32(offset + 4, valLen, true);
+      offset += 8;
+      for (let i = 0; i < tag.encoded.length; i++) {
+        view.setUint8(offset + i, tag.encoded[i]);
+      }
+      view.setUint8(offset + tag.encoded.length, 0); // null terminator
+      offset += valLen;
+      if (valLen % 2 !== 0) {
+        view.setUint8(offset, 0); // padding
+        offset += 1;
+      }
+    }
+  }
+
+  // ID3 chunk for cover art and Unicode text support (read by PotPlayer, foobar2000 etc.)
+  if (id3ChunkPayloadSize > 0) {
+    writeString(view, offset, "id3 ");
+    view.setUint32(offset + 4, id3Data.length, true);
+    offset += 8;
+
+    for (let i = 0; i < id3Data.length; i += 1) {
+      view.setUint8(offset + i, id3Data[i]);
+    }
+    offset += id3Data.length;
+
+    if (id3Data.length % 2 !== 0) {
+      view.setUint8(offset, 0);
+      offset += 1;
     }
   }
 
@@ -226,15 +227,8 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function toAsciiInfoText(value: string | undefined) {
+function cleanInfoText(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const stripped = value.replace(/\u0000/g, "").trim();
-  if (stripped.length === 0) return undefined;
-
-  let out = "";
-  for (let i = 0; i < stripped.length; i += 1) {
-    const code = stripped.charCodeAt(i);
-    out += code >= 0x20 && code <= 0x7e ? stripped[i] : "?";
-  }
-  return out.trim() || undefined;
+  return stripped.length > 0 ? stripped : undefined;
 }
