@@ -8,6 +8,8 @@ import {
   MASTERING_PRESET_OPTIONS,
   type MasteringPresetId
 } from "./presets";
+import { useEffect, useRef, useState } from "react";
+import { motion, useSpring, useTransform, useMotionValueEvent } from "framer-motion";
 
 const sampleRateOptions = [
   { value: "48000", label: "48 kHz" },
@@ -66,7 +68,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           <RangeRow
             label="Target LUFS"
             value={masteringSettings.targetLufs}
-            display={`${masteringSettings.targetLufs.toFixed(1)}`}
+            formatDisplay={(v) => `${v.toFixed(1)}`}
             min={-20}
             max={-8}
             step={0.1}
@@ -76,7 +78,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           <RangeRow
             label="True Peak Ceiling"
             value={masteringSettings.truePeakCeiling}
-            display={`${masteringSettings.truePeakCeiling.toFixed(1)} dBTP`}
+            formatDisplay={(v) => `${v.toFixed(1)} dBTP`}
             min={-2}
             max={-0.1}
             step={0.1}
@@ -86,7 +88,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           <RangeRow
             label="Output Trim"
             value={masteringSettings.outputTrimDb}
-            display={`${masteringSettings.outputTrimDb.toFixed(1)} dB`}
+            formatDisplay={(v) => `${v.toFixed(1)} dB`}
             min={-6}
             max={6}
             step={0.1}
@@ -134,7 +136,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
           <RangeRow
             label="Stereo Width"
             value={masteringSettings.stereoWidth}
-            display={`${Math.round(masteringSettings.stereoWidth)}%`}
+            formatDisplay={(v) => `${Math.round(v)}%`}
             min={80}
             max={140}
             step={1}
@@ -264,7 +266,7 @@ function PercentRow({
     <RangeRow
       label={label}
       value={value}
-      display={`${Math.round(value)}%`}
+      formatDisplay={(v) => `${Math.round(v)}%`}
       min={0}
       max={100}
       step={1}
@@ -277,7 +279,7 @@ function PercentRow({
 function RangeRow({
   label,
   value,
-  display,
+  formatDisplay,
   min,
   max,
   step,
@@ -286,27 +288,60 @@ function RangeRow({
 }: {
   label: string;
   value: number;
-  display: string;
+  formatDisplay: (v: number) => string;
   min: number;
   max: number;
   step: number;
   tooltip: string;
   onChange: (next: number) => void;
 }) {
+  const springValue = useSpring(value, { stiffness: 1100, damping: 65 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (!isDragging) {
+      springValue.set(value);
+    }
+  }, [value, springValue, isDragging]);
+
+  useMotionValueEvent(springValue, "change", (latest) => {
+    if (inputRef.current) {
+      inputRef.current.value = String(latest);
+    }
+  });
+
+  const progress = useTransform(springValue, (latest) =>
+    `${Math.max(0, Math.min(100, ((latest - min) / (max - min)) * 100))}%`
+  );
+
+  const displayMotion = useTransform(springValue, (latest) => formatDisplay(latest));
+
   return (
     <label className="control-row compact has-tooltip" data-tooltip={tooltip}>
       <span className="control-label">{label}</span>
       <div className="control-main">
-        <input
+        <motion.input
+          ref={inputRef}
           type="range"
           min={min}
           max={max}
           step={step}
-          value={value}
-          style={{ "--progress": `${Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))}%` } as React.CSSProperties}
-          onChange={(event) => onChange(Number(event.currentTarget.value))}
+          defaultValue={value}
+          style={{ "--progress": progress as any } as any}
+          onMouseDown={() => setIsDragging(true)}
+          onTouchStart={() => setIsDragging(true)}
+          onMouseUp={() => setIsDragging(false)}
+          onTouchEnd={() => setIsDragging(false)}
+          onChange={(event) => {
+            const nextValue = Number(event.currentTarget.value);
+            if (isDragging) {
+              springValue.jump(nextValue);
+            }
+            onChange(nextValue);
+          }}
         />
-        <strong>{display}</strong>
+        <motion.strong>{displayMotion}</motion.strong>
       </div>
     </label>
   );

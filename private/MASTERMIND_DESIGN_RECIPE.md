@@ -266,6 +266,7 @@ body {
 - 트랙: 높이 2px의 가느다란 선, `--progress` 변수로 채움 비율 표현
 - 썸(Thumb): 세로로 긴 직사각형(8×14px), **border-radius: 0** — 기계적 페이더
 - Hover 시 수직 확장 `scaleY(1.5)`
+- **스프링 모션 (Framer Motion)**: 수동 드래그가 아닌 상태 변화 시, `stiffness: 1100`, `damping: 65`의 물리 효과를 적용하여 찰랑거림 없이 즉각적이고 공학적으로 착 달라붙도록 제어합니다.
 
 ```css
 input[type="range"]::-webkit-slider-runnable-track {
@@ -434,7 +435,7 @@ export default function DecorativeSymbol() {
 > 3. **레이아웃**: 모든 구성 단위를 `.panel`(`border: 1px solid var(--line-strong)`, blur 0의 `box-shadow: 4px 4px 0`)로 감싸 모듈화합니다. 패널 좌상단에 10×10px 사각 장식(::before)을 넣습니다. 패딩은 4~12px 스케일로 조밀하게. **내부 데이터가 변해도 레이아웃이 덜컹거리면 안 됩니다.** 모바일 환경에서는 다중 패널을 세로 열(Stack)로 배치하세요.
 > 4. **배경**: body에 80px 간격 `linear-gradient` 그리드 라인을 깔고 `gridSlide` 애니메이션으로 천천히 좌측 이동시킵니다.
 > 5. **타이포**: 수치/시간/진행률은 반드시 모노스페이스(`--font-mono`) 폰트를 사용합니다. 헤드라인은 `--font-headline`로 자간을 살짝 좁히세요. 폰트는 외부 CDN 아닌 woff2로 내재화합니다.
-> 6. **인터랙션**: 버튼은 `clip-path`로 좌상단 모서리를 사선 절단(chamfer). `::before`(외곽)+`::after`(내부) 가상요소로 1px 테두리를 구현합니다. Hover 시 `scale(0.98)` 축소, Active 시 `scale(0.95)`. 모든 상태 시각화와 Hover 마이크로 인터랙션은 터치 기기를 방어하기 위해 `@media (hover: hover)` 처리하세요. 주요 헤드라인 텍스트 우상단에는 0.5em 크기의 십자(+) 기호를 배치할 수 있으며, 간헐적으로 빠르게 스핀하는 애니메이션을 넣어 기계적 디테일을 살립니다. 슬라이더 thumb은 8×14px 세로 직사각형(페이더)입니다.
+> 6. **인터랙션**: 버튼은 `clip-path`로 좌상단 모서리를 사선 절단(chamfer). `::before`(외곽)+`::after`(내부) 가상요소로 1px 테두리를 구현합니다. Hover 시 `scale(0.98)` 축소, Active 시 `scale(0.95)`. 모든 상태 시각화와 Hover 마이크로 인터랙션은 터치 기기를 방어하기 위해 `@media (hover: hover)` 처리하세요. 주요 헤드라인 텍스트 우상단에는 0.5em 크기의 십자(+) 기호를 배치할 수 있으며, 간헐적으로 빠르게 스핀하는 애니메이션을 넣어 기계적 디테일을 살립니다. 슬라이더 thumb은 8×14px 세로 직사각형(페이더)이며, `framer-motion` 모션 적용 시 `stiffness: 1100`, `damping: 65`의 스프링 물리 효과로 흔들림 없이 즉각적으로 달라붙게 제어합니다.
 > 7. **컴포넌트**: 브라우저 기본 `<select>`나 스크롤바 대신 커스텀 드롭다운(같은 chamfer 스타일)과 커스텀 스크롤바(6px, 각진 형태)를 사용하세요.
 > 8. **공통 규칙**: 트랜지션은 `120ms ease`. 비활성 상태는 `opacity: 0.4`. 포커스 링은 `outline: 1px solid var(--accent)`. 링크 밑줄은 `thickness: 1px`, `underline-offset: 2px`.
 > 9. **다국어/글로벌**: i18n 분기 처리를 처음부터 염두에 두고, 텍스트 길이 변화에도 UI가 무너지지 않도록 유연하게 설계하세요.
