@@ -510,8 +510,8 @@ a {
 
 .dropdown {
   position: relative;
-  min-width: 110px;
-  /* Increased from 65px for better readability */
+  min-width: 72px;
+  /* Reduced from 110px to prevent overflow in narrow views */
 }
 
 .dropdown-trigger {

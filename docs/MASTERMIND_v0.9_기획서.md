@@ -41,7 +41,7 @@
 
 ### C. 음원 메타데이터 보존 (MetaData Preservation) — ✅ 완전 해결
 마스터링 후 곡 정보가 사라지는 문제를 해결하기 위해 데이터 보존 파이프라인을 구축하고, 발견된 3가지 호환성 이슈를 모두 수정했습니다.
-1. **추출 로직**: `QueueProvider.tsx`에서 파일 업로드 시 `music-metadata-browser`를 통해 비동기로 메타데이터(제목, 아티스트, 앨범 아트 등)를 추출하여 `TrackItem`에 저장합니다.
+1. **추출 로직**: `QueueProvider.tsx`에서 `music-metadata-browser`를 통해 메타데이터(제목, 아티스트, 앨범 아트 등)를 추출합니다. 업로드 시 백그라운드 프리캐시를 시도하고, 프로세싱 시점에서는 `await`로 추출 완료를 보장한 뒤 `TrackItem`에 저장합니다.
 2. **주입 로직**:
    - **WAV**: `wav.ts`에서 RIFF LIST INFO 청크(UTF-8 텍스트)와 id3 청크(커버 아트)를 data 청크 뒤에 생성하여 주입합니다.
    - **MP3**: `mp3-tagger.ts` 유틸리티를 통해 ID3v2.3 태그(UTF-16LE, 커버 아트 APIC 포함)를 생성하고, Web Worker를 통해 데이터 최상단에 프리펜드(Prepend)합니다.
