@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-export type UiLocale = "ko" | "en";
+export type UiLocale = "ko" | "en" | "pt" | "ja";
 
 export function useUiLocale(): UiLocale {
   return useMemo(() => detectUiLocale(), []);
@@ -12,5 +12,16 @@ function detectUiLocale(): UiLocale {
   }
 
   const candidates = [...(navigator.languages ?? []), navigator.language].filter(Boolean);
-  return candidates.some((language) => language.toLowerCase().startsWith("ko")) ? "ko" : "en";
+
+  if (candidates.some((language) => language.toLowerCase().startsWith("ko"))) {
+    return "ko";
+  }
+  if (candidates.some((language) => language.toLowerCase().startsWith("pt"))) {
+    return "pt";
+  }
+  if (candidates.some((language) => language.toLowerCase().startsWith("ja"))) {
+    return "ja";
+  }
+
+  return "en";
 }
