@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:ext": "tsc -b && vite build -c vite.ext.config.ts && npm run zip:ext",
-    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mastermind-ext-v0.8.0.zip -Force\"",
+    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mastermind-ext-v0.8.1.zip -Force\"",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -11,6 +11,13 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { motion, useSpring, useTransform, useMotionValueEvent } from "framer-motion";
 
+const TAKT_EXTENSION_URL =
+  "https://chromewebstore.google.com/detail/takt/kfgbaeikmjkommheilhphiageempppph";
+const MASTERMIND_EXTENSION_URL =
+  "https://chromewebstore.google.com/detail/mastermind/amifcacblgkkccoejchknikodagjhopk";
+const MASTERMIND_REVIEWS_URL = `${MASTERMIND_EXTENSION_URL}/reviews`;
+const MASTERMIND_WEB_ORIGIN = "https://mstr-mnd.vercel.app";
+
 const sampleRateOptions = [
   { value: "48000", label: "48 kHz" },
   { value: "44100", label: "44.1 kHz" }
@@ -46,6 +53,51 @@ interface MasteringPanelProps {
 export function MasteringPanel({ locale }: MasteringPanelProps) {
   const { masteringSettings, updateMasteringSettings, selectedPresetId, setMasteringPreset } = useQueue();
   const tips = getUiTips(locale);
+  const [showTaktPromo] = useState(() => Math.random() < 0.5);
+  const isExtensionRuntime = window.location.protocol === "chrome-extension:";
+  const isHostedWebApp = window.location.origin === MASTERMIND_WEB_ORIGIN;
+
+  const promoContent = (() => {
+    if (showTaktPromo || (!isExtensionRuntime && !isHostedWebApp)) {
+      return (
+        <>
+          Need focus? Try{" "}
+          <a
+            className="inline-link"
+            href={TAKT_EXTENSION_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            TAKT
+          </a>
+        </>
+      );
+    }
+
+    if (isHostedWebApp) {
+      return (
+        <a
+          className="inline-link"
+          href={MASTERMIND_EXTENSION_URL}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          Get Chrome Extension
+        </a>
+      );
+    }
+
+    return (
+      <a
+        className="inline-link"
+        href={MASTERMIND_REVIEWS_URL}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Leave a review
+      </a>
+    );
+  })();
 
   return (
     <section className="panel mastering-panel">
@@ -224,17 +276,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
         </section>
       </ScrollArea>
       <footer className="app-credit">
-        <div className="promo-links">
-          Need focus? Try{" "}
-          <a
-            className="inline-link"
-            href="https://chromewebstore.google.com/detail/takt/kfgbaeikmjkommheilhphiageempppph"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            TAKT
-          </a>
-        </div>
+        <div className="promo-links">{promoContent}</div>
         <div className="author-credit">
           Made by.{" "}
           <a
@@ -397,4 +439,3 @@ function InlineDropdown({
     </div>
   );
 }
-
