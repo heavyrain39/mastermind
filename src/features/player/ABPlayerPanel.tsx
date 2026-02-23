@@ -246,9 +246,6 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
           onStop={() => stopMode("B")}
           onSeek={(event) => onWaveClick(event, "B")}
         />
-      </div>
-
-      <div className="panel-subhead with-action ab-footer-actions">
         <button
           type="button"
           className="primary-action-btn has-tooltip"

@@ -380,17 +380,16 @@ a {
   background: var(--accent);
   color: var(--accent-text);
   border-color: var(--accent);
-  transform: scale(0.98);
 }
 
 .primary-action-btn:active {
-  transform: scale(0.96);
+  font-size: 12px;
+  transition: font-size 50ms ease;
 }
 
 .primary-action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
   background: transparent;
   color: var(--text-dim);
   border-color: var(--line-strong);
@@ -735,15 +734,15 @@ a {
 }
 
 .player-panel {
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
 }
 
 .wave-stack {
   padding: 10px;
   display: grid;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: 1fr 1fr auto;
   gap: 8px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: none;
   min-height: 0;
 }
 
@@ -830,10 +829,7 @@ a {
   font-weight: 620;
 }
 
-.ab-footer-actions {
-  justify-content: center;
-  border-top: none;
-}
+
 
 .mastering-panel {
   grid-template-rows: auto 1fr auto;

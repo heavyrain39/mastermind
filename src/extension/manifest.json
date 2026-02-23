@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Mastermind",
-    "version": "0.8.1",
+    "version": "0.8.2",
     "description": "Your clever audio mastering ally.",
     "action": {
         "default_icon": "favicon.png"
