@@ -1,9 +1,11 @@
 node_modules
 dist
+dist-ext
 *.log
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+mastermind-ext-v*.zip
 
 /private/*
 !/private/*.md
