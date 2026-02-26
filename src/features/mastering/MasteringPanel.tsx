@@ -13,10 +13,10 @@ import { motion, useSpring, useTransform, useMotionValueEvent } from "framer-mot
 
 const TAKT_EXTENSION_URL =
   "https://chromewebstore.google.com/detail/takt/kfgbaeikmjkommheilhphiageempppph";
-const MASTERMIND_EXTENSION_URL =
+const MSTRMND_EXTENSION_URL =
   "https://chromewebstore.google.com/detail/mastermind/amifcacblgkkccoejchknikodagjhopk";
-const MASTERMIND_REVIEWS_URL = `${MASTERMIND_EXTENSION_URL}/reviews`;
-const MASTERMIND_WEB_ORIGIN = "https://mstr-mnd.vercel.app";
+const MSTRMND_REVIEWS_URL = `${MSTRMND_EXTENSION_URL}/reviews`;
+const MSTRMND_WEB_ORIGIN = "https://mstr-mnd.vercel.app";
 
 const sampleRateOptions = [
   { value: "48000", label: "48 kHz" },
@@ -55,7 +55,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
   const tips = getUiTips(locale);
   const [showTaktPromo] = useState(() => Math.random() < 0.5);
   const isExtensionRuntime = window.location.protocol === "chrome-extension:";
-  const isHostedWebApp = window.location.origin === MASTERMIND_WEB_ORIGIN;
+  const isHostedWebApp = window.location.origin === MSTRMND_WEB_ORIGIN;
 
   const promoContent = (() => {
     if (showTaktPromo || (!isExtensionRuntime && !isHostedWebApp)) {
@@ -78,7 +78,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
       return (
         <a
           className="inline-link"
-          href={MASTERMIND_EXTENSION_URL}
+          href={MSTRMND_EXTENSION_URL}
           target="_blank"
           rel="noreferrer noopener"
         >
@@ -90,7 +90,7 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
     return (
       <a
         className="inline-link"
-        href={MASTERMIND_REVIEWS_URL}
+        href={MSTRMND_REVIEWS_URL}
         target="_blank"
         rel="noreferrer noopener"
       >

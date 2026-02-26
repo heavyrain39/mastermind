@@ -1,12 +1,12 @@
 {
-  "name": "mastermind",
+  "name": "mstrmnd",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build:ext": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-ext.ps1",
-    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mastermind-ext-v0.8.2.zip -Force\"",
+    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mstrmnd-ext-v0.8.3.zip -Force\"",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,12 +1,12 @@
 ---
 
-# Privacy Policy for Mastermind
+# Privacy Policy for MSTRMND
 
 ---
 
 **Last Updated: February 22, 2026**
 
-Mastermind ("we", "us", or "our") operates the Mastermind Chrome Extension.
+MSTRMND ("we", "us", or "our") operates the MSTRMND Chrome Extension.
 
 This Privacy Policy explains how information is handled when you use the extension.
 
@@ -37,7 +37,7 @@ If you click optional external links inside the extension (if shown), those webs
 
 ### 5. Data Retention and Control
 
-Since Mastermind does not collect or transmit any data, there is no data retention on our end. All output files are generated locally and downloaded directly to your device via your browser's standard download mechanism.
+Since MSTRMND does not collect or transmit any data, there is no data retention on our end. All output files are generated locally and downloaded directly to your device via your browser's standard download mechanism.
 
 ### 6. Changes to This Privacy Policy
 

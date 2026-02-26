@@ -26,7 +26,7 @@ if not exist "node_modules" (
   )
 )
 
-echo [RUN] Starting Mastermind dev server...
+echo [RUN] Starting MSTRMND dev server...
 echo [INFO] Opening browser at %APP_URL%
 start "" "%APP_URL%"
 call npm run dev

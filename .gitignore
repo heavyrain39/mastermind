@@ -6,6 +6,7 @@ dist-ext
 vite.config.js
 vite.config.d.ts
 mastermind-ext-v*.zip
+mstrmnd-ext-v*.zip
 
 /private/*
 !/private/*.md

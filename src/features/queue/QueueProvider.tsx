@@ -48,6 +48,11 @@ interface QueueContextValue {
 const QueueContext = createContext<QueueContextValue | null>(null);
 
 const STORAGE_KEYS = {
+  settings: "mstrmnd.mastering.settings.v1",
+  preset: "mstrmnd.mastering.preset.v1"
+} as const;
+
+const LEGACY_STORAGE_KEYS = {
   settings: "mastermind.mastering.settings.v1",
   preset: "mastermind.mastering.preset.v1"
 } as const;
@@ -258,7 +263,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const zipUrl = URL.createObjectURL(zipBlob);
-      triggerDownload(zipUrl, `mastermind-mastered-${timestamp}.zip`);
+      triggerDownload(zipUrl, `mstrmnd-mastered-${timestamp}.zip`);
       window.setTimeout(() => URL.revokeObjectURL(zipUrl), 2000);
     } catch (error) {
       console.error("ZIP Generation failed:", error);
@@ -681,7 +686,7 @@ function readSettingsFromStorage(): MasteringSettings {
   }
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEYS.settings);
+    const raw = readStorageWithLegacyKey(STORAGE_KEYS.settings, LEGACY_STORAGE_KEYS.settings);
     if (!raw) return { ...DEFAULT_MASTERING_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<MasteringSettings>;
     return sanitizeSettings(parsed);
@@ -696,7 +701,7 @@ function readPresetFromStorage(): MasteringPresetId {
   }
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEYS.preset);
+    const raw = readStorageWithLegacyKey(STORAGE_KEYS.preset, LEGACY_STORAGE_KEYS.preset);
     if (!raw) return DEFAULT_PRESET_ID;
     if (
       raw === "none" ||
@@ -733,6 +738,21 @@ function writePresetToStorage(presetId: MasteringPresetId) {
   } catch {
     // Ignore persistence errors in private mode or restricted environments.
   }
+}
+
+function readStorageWithLegacyKey(primaryKey: string, legacyKey: string): string | null {
+  const current = window.localStorage.getItem(primaryKey);
+  if (current !== null) {
+    return current;
+  }
+
+  const legacy = window.localStorage.getItem(legacyKey);
+  if (legacy !== null) {
+    window.localStorage.setItem(primaryKey, legacy);
+    return legacy;
+  }
+
+  return null;
 }
 
 function sanitizeSettings(patch: Partial<MasteringSettings>): MasteringSettings {

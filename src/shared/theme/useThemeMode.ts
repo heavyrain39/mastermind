@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
-import { THEME_STORAGE_KEY, ThemeMode } from "./theme";
+import { LEGACY_THEME_STORAGE_KEY, THEME_STORAGE_KEY, ThemeMode } from "./theme";
+
+function readStoredThemeMode(): ThemeMode | null {
+  const current = localStorage.getItem(THEME_STORAGE_KEY);
+  if (current === "light" || current === "dark" || current === "system") {
+    return current;
+  }
+
+  const legacy = localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+  if (legacy === "light" || legacy === "dark" || legacy === "system") {
+    localStorage.setItem(THEME_STORAGE_KEY, legacy);
+    return legacy;
+  }
+
+  return null;
+}
 
 function getInitialMode(): ThemeMode {
-  const saved = localStorage.getItem(THEME_STORAGE_KEY);
-  if (saved === "light" || saved === "dark" || saved === "system") {
-    return saved;
-  }
-  return "system";
+  return readStoredThemeMode() ?? "system";
 }
 
 export function useThemeMode() {
