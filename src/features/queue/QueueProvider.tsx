@@ -58,6 +58,13 @@ const LEGACY_STORAGE_KEYS = {
 } as const;
 
 const DEFAULT_MASTERING_SETTINGS = getPresetSettings(DEFAULT_PRESET_ID);
+const OUTPUT_SETTING_KEYS: Array<keyof MasteringSettings> = [
+  "sampleRate",
+  "bitDepth",
+  "ditherMode",
+  "outputFormat",
+  "mp3Bitrate"
+];
 
 
 export function QueueProvider({ children }: { children: ReactNode }) {
@@ -68,11 +75,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [downloadingTrackIds, setDownloadingTrackIds] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Map<string, number>>(new Map());
   const cancelRef = useRef(false);
-  const [masteringSettings, setMasteringSettings] = useState<MasteringSettings>(() =>
-    readSettingsFromStorage()
+  const initialMasteringStateRef = useRef<{
+    presetId: MasteringPresetId;
+    settings: MasteringSettings;
+  } | null>(null);
+  if (!initialMasteringStateRef.current) {
+    initialMasteringStateRef.current = readPersistedMasteringState();
+  }
+  const [masteringSettings, setMasteringSettings] = useState<MasteringSettings>(
+    () => initialMasteringStateRef.current!.settings
   );
-  const [selectedPresetId, setSelectedPresetId] = useState<MasteringPresetId>(() =>
-    readPresetFromStorage()
+  const [selectedPresetId, setSelectedPresetId] = useState<MasteringPresetId>(
+    () => initialMasteringStateRef.current!.presetId
   );
   const sequenceRef = useRef(0);
   const tracksRef = useRef<TrackItem[]>([]);
@@ -92,15 +106,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const updateMasteringSettings = (patch: Partial<MasteringSettings>) => {
     setMasteringSettings((prev) => ({ ...prev, ...patch }));
 
-    const outputSettings: (keyof MasteringSettings)[] = [
-      "sampleRate",
-      "bitDepth",
-      "ditherMode",
-      "outputFormat",
-      "mp3Bitrate"
-    ];
     const isOnlyOutputSetting = Object.keys(patch).every((key) =>
-      outputSettings.includes(key as keyof MasteringSettings)
+      OUTPUT_SETTING_KEYS.includes(key as keyof MasteringSettings)
     );
 
     if (!isOnlyOutputSetting) {
@@ -299,7 +306,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       workerClientRef.current = workerClient;
       const decodeContext = getDecodeContext(decodeContextRef);
       const selectedSettings = settingsRef.current;
-      const workerSettings = toWorkerSettings(selectedSettings);
+      const workerSettings = toWorkerSettings(selectedSettings, selectedPresetId);
 
       const CONCURRENCY = 4;
       const taskQueue = [...targets];
@@ -431,7 +438,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 masteredUrl: nextMasteredUrl,
                 masteredFileName: nextFileName,
                 masteredSizeBytes: masteredBlob.size,
-                masteredPresetId: selectedSettings.presetId,
+                masteredPresetId: selectedPresetId === "custom" ? undefined : selectedPresetId,
                 masteredBuffer: masteredBuffer,
                 progressPercent: 100,
                 progressStatus: "Complete",
@@ -509,6 +516,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     settingsRef.current = masteringSettings;
   }, [masteringSettings]);
+
+  useEffect(() => {
+    if (selectedPresetId === "custom") return;
+
+    setMasteringSettings((prev) => {
+      const synced = syncSettingsWithPreset(prev, selectedPresetId as FixedPresetId);
+      return areSettingsEqual(prev, synced) ? prev : synced;
+    });
+  }, [selectedPresetId]);
 
   useEffect(() => {
     writeSettingsToStorage(masteringSettings);
@@ -657,8 +673,12 @@ function toFiniteNumber(value: number) {
   return value;
 }
 
-function toWorkerSettings(settings: MasteringSettings): FullChainSettings {
+function toWorkerSettings(
+  settings: MasteringSettings,
+  selectedPresetId: MasteringPresetId
+): FullChainSettings {
   return {
+    presetId: selectedPresetId,
     inputGain: settings.outputTrimDb,
     normalizeLoudness: settings.normalizeLoudness,
     targetLufs: settings.targetLufs,
@@ -720,6 +740,23 @@ function readPresetFromStorage(): MasteringPresetId {
   }
 
   return DEFAULT_PRESET_ID;
+}
+
+function readPersistedMasteringState(): {
+  presetId: MasteringPresetId;
+  settings: MasteringSettings;
+} {
+  const presetId = readPresetFromStorage();
+  const settings = readSettingsFromStorage();
+
+  if (presetId === "custom") {
+    return { presetId, settings };
+  }
+
+  return {
+    presetId,
+    settings: syncSettingsWithPreset(settings, presetId as FixedPresetId)
+  };
 }
 
 function writeSettingsToStorage(settings: MasteringSettings) {
@@ -809,4 +846,42 @@ function sanitizeSettings(patch: Partial<MasteringSettings>): MasteringSettings 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
   if (typeof value !== "number" || Number.isNaN(value)) return fallback;
   return Math.max(min, Math.min(max, value));
+}
+
+function syncSettingsWithPreset(
+  settings: MasteringSettings,
+  presetId: FixedPresetId
+): MasteringSettings {
+  const presetSettings = getPresetSettings(presetId);
+  const synced: MasteringSettings = { ...presetSettings };
+
+  for (const key of OUTPUT_SETTING_KEYS) {
+    synced[key] = settings[key] as never;
+  }
+
+  return synced;
+}
+
+function areSettingsEqual(a: MasteringSettings, b: MasteringSettings) {
+  return (
+    a.targetLufs === b.targetLufs &&
+    a.truePeakCeiling === b.truePeakCeiling &&
+    a.outputTrimDb === b.outputTrimDb &&
+    a.normalizeLoudness === b.normalizeLoudness &&
+    a.warmth === b.warmth &&
+    a.clarity === b.clarity &&
+    a.air === b.air &&
+    a.lowEndClean === b.lowEndClean &&
+    a.stereoWidth === b.stereoWidth &&
+    a.spaceDepth === b.spaceDepth &&
+    a.monoBassAnchor === b.monoBassAnchor &&
+    a.glueCompression === b.glueCompression &&
+    a.autoLevelStrength === b.autoLevelStrength &&
+    a.sampleRate === b.sampleRate &&
+    a.bitDepth === b.bitDepth &&
+    a.ditherMode === b.ditherMode &&
+    a.outputFormat === b.outputFormat &&
+    a.mp3Bitrate === b.mp3Bitrate &&
+    a.presetId === b.presetId
+  );
 }

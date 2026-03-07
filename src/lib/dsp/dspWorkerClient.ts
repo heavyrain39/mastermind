@@ -32,6 +32,7 @@ interface NormalizeResult {
 }
 
 export interface FullChainSettings {
+  presetId?: string;
   inputGain: number;
   normalizeLoudness: boolean;
   targetLufs: number;

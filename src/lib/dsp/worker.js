@@ -19,13 +19,14 @@ import {
   dbToLinear,
   // Full chain DSP functions
   measureLUFS,
+  findTruePeak,
+  applyGain,
   normalizeToLUFS,
   applyExciter,
   applyTapeWarmth,
   applyMultibandTransient,
   processHybridDynamic,
   applyFinalFilters,
-  applyMasteringSoftClip,
   applyLookaheadLimiter
 } from './index.js';
 
@@ -450,6 +451,74 @@ function applyLookaheadLimiterToChannels(
   }
 
   return outputChannels;
+}
+
+function applyTransparentLimiterToChannels(
+  channels,
+  sampleRate,
+  ceilingLinear = LIMITER_DEFAULTS.CEILING_LINEAR,
+  lookaheadMs = 5,
+  releaseMs = 120
+) {
+  const numChannels = channels.length;
+  const length = channels[0].length;
+  const lookaheadSamples = Math.max(1, Math.floor(sampleRate * lookaheadMs / 1000));
+  const releaseCoef = Math.exp(-1 / (releaseMs * sampleRate / 1000));
+  const gainEnvelope = new Float32Array(length);
+  gainEnvelope.fill(1.0);
+
+  const histories = Array.from({ length: numChannels }, () => [0, 0, 0, 0]);
+
+  for (let i = 0; i < length; i++) {
+    let truePeak = 0;
+
+    for (let ch = 0; ch < numChannels; ch++) {
+      const history = histories[ch];
+      history[0] = history[1];
+      history[1] = history[2];
+      history[2] = history[3];
+      history[3] = channels[ch][i];
+
+      if (i >= 3) {
+        truePeak = Math.max(truePeak, calculateTruePeakSample(history));
+      } else {
+        truePeak = Math.max(truePeak, Math.abs(channels[ch][i]));
+      }
+    }
+
+    if (truePeak <= ceilingLinear) {
+      continue;
+    }
+
+    const requiredGain = ceilingLinear / truePeak;
+    const start = Math.max(0, i - lookaheadSamples);
+    const range = Math.max(1, i - start);
+
+    for (let j = start; j <= i; j++) {
+      const t = (j - start) / range;
+      const interpolatedGain = 1 + (requiredGain - 1) * t;
+      gainEnvelope[j] = Math.min(gainEnvelope[j], interpolatedGain);
+    }
+  }
+
+  let currentGain = 1.0;
+  for (let i = 0; i < length; i++) {
+    if (gainEnvelope[i] < currentGain) {
+      currentGain = gainEnvelope[i];
+    } else {
+      currentGain = releaseCoef * currentGain + (1 - releaseCoef) * 1.0;
+      currentGain = Math.min(currentGain, 1.0);
+    }
+    gainEnvelope[i] = currentGain;
+  }
+
+  return channels.map((input) => {
+    const output = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      output[i] = input[i] * gainEnvelope[i];
+    }
+    return output;
+  });
 }
 
 /**
@@ -1382,6 +1451,87 @@ function applyGlueCompressor(buffer, options) {
   return outBuffer;
 }
 
+function hasLinearOnlySettings(settings) {
+  const eqValues = [
+    Number(settings.eqLow) || 0,
+    Number(settings.eqLowMid) || 0,
+    Number(settings.eqMid) || 0,
+    Number(settings.eqHighMid) || 0,
+    Number(settings.eqHigh) || 0
+  ];
+
+  return (
+    !settings.deharsh &&
+    !settings.addAir &&
+    !settings.tapeWarmth &&
+    !settings.addPunch &&
+    !settings.cleanLowEnd &&
+    !settings.glueCompression &&
+    !settings.centerBass &&
+    Math.abs((Number(settings.stereoWidth) || 100) - 100) < 1e-6 &&
+    eqValues.every((value) => value === 0)
+  );
+}
+
+function applyTransparentGain(buffer, gainDB) {
+  if (!gainDB) {
+    return buffer;
+  }
+
+  return applyGain(buffer, gainDB);
+}
+
+function keepLinearHeadroom(buffer, ceilingDB) {
+  const peakDB = findTruePeak(buffer);
+  if (!Number.isFinite(peakDB) || peakDB <= ceilingDB) {
+    return buffer;
+  }
+
+  return applyTransparentGain(buffer, ceilingDB - peakDB);
+}
+
+function normalizeToLUFSTransparent(buffer, targetLUFS, ceilingDB) {
+  let workingBuffer = buffer;
+
+  for (let pass = 0; pass < 3; pass++) {
+    const currentLUFS = measureLUFS(workingBuffer, targetLUFS);
+    if (!Number.isFinite(currentLUFS)) {
+      return keepLinearHeadroom(workingBuffer, ceilingDB);
+    }
+
+    const gainDB = targetLUFS - currentLUFS;
+    if (Math.abs(gainDB) < 0.15) {
+      break;
+    }
+
+    workingBuffer = applyTransparentGain(workingBuffer, gainDB);
+
+    if (findTruePeak(workingBuffer) > ceilingDB) {
+      const limitedChannels = applyTransparentLimiterToChannels(
+        Array.from({ length: workingBuffer.numberOfChannels }, (_, ch) =>
+          workingBuffer.getChannelData(ch)
+        ),
+        workingBuffer.sampleRate,
+        Math.pow(10, ceilingDB / 20)
+      );
+
+      const limitedBuffer = new AudioBuffer({
+        numberOfChannels: workingBuffer.numberOfChannels,
+        length: workingBuffer.length,
+        sampleRate: workingBuffer.sampleRate
+      });
+
+      for (let ch = 0; ch < limitedChannels.length; ch++) {
+        limitedBuffer.copyToChannel(limitedChannels[ch], ch);
+      }
+
+      workingBuffer = limitedBuffer;
+    }
+  }
+
+  return keepLinearHeadroom(workingBuffer, ceilingDB);
+}
+
 // ============================================================================
 // Message Handler
 // ============================================================================
@@ -1592,6 +1742,38 @@ self.onmessage = async (e) => {
 
         // --- EXPORT MODE ONLY (Live Chain Simulation) ---
         // Includes: Final Filters, EQ, Cut Mud, Glue Comp, Soft Clip, Limit
+        if (hasLinearOnlySettings(settings)) {
+          sendProgress(id, 0.70, 'Applying transparent gain...');
+
+          if (settings.normalizeLoudness && settings.targetLufs) {
+            buffer = normalizeToLUFSTransparent(
+              buffer,
+              settings.targetLufs,
+              settings.truePeakCeiling || -1
+            );
+          } else {
+            buffer = keepLinearHeadroom(buffer, settings.truePeakCeiling || -1);
+          }
+
+          const finalLufs = measureLUFS(buffer);
+          const outputChannels = [];
+          const transferables = [];
+          for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+            const channelData = buffer.getChannelData(ch).slice();
+            outputChannels.push(channelData);
+            transferables.push(channelData.buffer);
+          }
+
+          result = {
+            channels: outputChannels,
+            lufs: finalLufs,
+            measuredLufs: finalLufs
+          };
+
+          sendProgress(id, 1.0, 'Complete');
+          self.postMessage({ id, success: true, result }, transferables);
+          return;
+        }
 
         // 5. Final Filters (HPF 30Hz / LPF 18k)
         // HPF is controlled by Clean Low End; LPF is always applied as final cleanup.
@@ -1646,38 +1828,18 @@ self.onmessage = async (e) => {
           buffer = normalizeToLUFS(buffer, targetLufs, 0, { skipLimiter: true });
         }
 
-        // 9. Soft Clipper
+        // 9. Final True Peak Limiter
         if (settings.truePeakLimit) {
-          sendProgress(id, 0.85, 'Applying soft clipper...');
+          sendProgress(id, 0.92, 'Applying final limiter...');
           const ceiling = settings.truePeakCeiling || -1;
-          buffer = applyMasteringSoftClip(buffer, {
-            ceiling: ceiling,
-            lookaheadMs: 0.5,
-            releaseMs: 10,
-            drive: 1.5
-          });
-        }
-
-        // 10. Final True Peak Limiter
-        if (settings.truePeakLimit) {
-          sendProgress(id, 0.95, 'Applying final limiter...');
-          const ceiling = settings.truePeakCeiling || -1;
-          const ceilingLinear = Math.pow(10, ceiling / 20);
-
-          const channelsForLimit = [];
-          for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-            channelsForLimit.push(buffer.getChannelData(ch));
-          }
-
-          const limitedChannels = applyLookaheadLimiterToChannels(
-            channelsForLimit,
+          const limitedChannels = applyTransparentLimiterToChannels(
+            Array.from({ length: buffer.numberOfChannels }, (_, ch) =>
+              buffer.getChannelData(ch)
+            ),
             buffer.sampleRate,
-            id,
-            ceilingLinear,
-            LIMITER_DEFAULTS.LOOKAHEAD_MS,
-            LIMITER_DEFAULTS.RELEASE_MS,
-            LIMITER_DEFAULTS.KNEE_DB,
-            true
+            Math.pow(10, ceiling / 20),
+            5,
+            120
           );
 
           for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
