@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:ext": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-ext.ps1",
-    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mstrmnd-ext-v0.8.4.zip -Force\"",
+    "zip:ext": "powershell -Command \"Compress-Archive -Path dist-ext\\* -DestinationPath mstrmnd-ext-v0.8.5.zip -Force\"",
     "preview": "vite preview"
   },
   "dependencies": {

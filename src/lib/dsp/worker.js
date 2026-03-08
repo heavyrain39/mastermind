@@ -22,10 +22,11 @@ import {
   findTruePeak,
   applyGain,
   normalizeToLUFS,
-  applyExciter,
-  applyTapeWarmth,
   applyMultibandTransient,
-  processHybridDynamic,
+  applyExciterWithOptions,
+  applyMultibandSaturation,
+  applyDynamicLeveling,
+  HybridDynamicProcessor,
   applyFinalFilters,
   applyLookaheadLimiter
 } from './index.js';
@@ -69,6 +70,185 @@ globalThis.AudioBuffer = WorkerAudioBuffer;
  */
 function sendProgress(id, progress, status) {
   self.postMessage({ id, type: 'PROGRESS', progress, status });
+}
+
+function clamp01(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeAmount(value) {
+  return clamp01((Number(value) || 0) / 100);
+}
+
+function mixBuffers(dryBuffer, wetBuffer, wetMix) {
+  const mix = clamp01(wetMix);
+  if (mix <= 0) {
+    return dryBuffer;
+  }
+  if (mix >= 1) {
+    return wetBuffer;
+  }
+
+  const output = new AudioBuffer({
+    numberOfChannels: dryBuffer.numberOfChannels,
+    length: dryBuffer.length,
+    sampleRate: dryBuffer.sampleRate
+  });
+
+  for (let ch = 0; ch < dryBuffer.numberOfChannels; ch++) {
+    const dry = dryBuffer.getChannelData(ch);
+    const wet = wetBuffer.getChannelData(ch);
+    const out = output.getChannelData(ch);
+    for (let i = 0; i < dry.length; i++) {
+      out[i] = dry[i] * (1 - mix) + wet[i] * mix;
+    }
+  }
+
+  return output;
+}
+
+function applyOnePoleLowpass(samples, cutoffHz, sampleRate) {
+  const output = new Float32Array(samples.length);
+  if (samples.length === 0) {
+    return output;
+  }
+
+  const rc = 1 / (2 * Math.PI * cutoffHz);
+  const dt = 1 / sampleRate;
+  const alpha = dt / (rc + dt);
+
+  let y = samples[0];
+  for (let i = 0; i < samples.length; i++) {
+    y += alpha * (samples[i] - y);
+    output[i] = y;
+  }
+
+  return output;
+}
+
+function enhanceStereoDepth(side, sampleRate, amount) {
+  const depth = clamp01(amount);
+  if (depth <= 0) {
+    return side;
+  }
+
+  const delayMs = 4 + depth * 8;
+  const delaySamples = Math.max(1, Math.floor(sampleRate * delayMs / 1000));
+  const delayed = new Float32Array(side.length);
+
+  for (let i = delaySamples; i < side.length; i++) {
+    delayed[i] = side[i - delaySamples];
+  }
+
+  const highPassed = applyBiquadFilter(
+    delayed,
+    calcHighPassCoeffs(sampleRate, 220 + depth * 80, 0.707)
+  );
+  const softened = applyOnePoleLowpass(highPassed, 7000 - depth * 2000, sampleRate);
+  const mix = 0.04 + depth * 0.12;
+  const output = new Float32Array(side.length);
+
+  for (let i = 0; i < side.length; i++) {
+    output[i] = side[i] + softened[i] * mix;
+  }
+
+  return output;
+}
+
+function applyClarityProcessing(buffer, amount) {
+  const clarity = clamp01(amount);
+  if (clarity <= 0) {
+    return buffer;
+  }
+
+  const processor = HybridDynamicProcessor.createMasteringPreset();
+  processor.dryWetMix = 1.0;
+  processor.dynamicEqSensitivity = 0.08 + clarity * 0.22;
+  processor.dynamicEqMaxCut = -(1.5 + clarity * 4.5);
+
+  const wet = processor.process(buffer);
+  return mixBuffers(buffer, wet, 0.10 + clarity * 0.28);
+}
+
+function applyAirProcessing(buffer, amount) {
+  const air = clamp01(amount);
+  if (air <= 0) {
+    return buffer;
+  }
+
+  return applyExciterWithOptions(buffer, {
+    hpfFreq: 6500 - air * 1000,
+    hpfSlope: 12,
+    drive: 0.25 + air * 0.45,
+    bias: 0.08 + air * 0.12,
+    mix: 1.5 + air * 6.5,
+    oversample: true
+  });
+}
+
+function applyWarmthProcessing(buffer, amount) {
+  const warmth = clamp01(amount);
+  if (warmth <= 0) {
+    return buffer;
+  }
+
+  return applyMultibandSaturation(buffer, {
+    f1: 200,
+    f2: 3800,
+    low: {
+      drive: 0.08 + warmth * 0.14,
+      bias: warmth * 0.04,
+      mix: 0.10 + warmth * 0.12,
+      gain: 0
+    },
+    mid: {
+      drive: 0.16 + warmth * 0.24,
+      bias: 0.04 + warmth * 0.06,
+      mix: 0.16 + warmth * 0.18,
+      gain: 0
+    },
+    high: {
+      drive: 0.08 + warmth * 0.14,
+      bias: warmth * 0.04,
+      mix: 0.06 + warmth * 0.10,
+      gain: 0
+    },
+    bypass: {
+      thresholdDb: -24,
+      kneeDb: 6,
+      windowMs: 100,
+      lookaheadMs: 5
+    }
+  });
+}
+
+function applyAutoLevelProcessing(buffer, amount, truePeakCeiling) {
+  const autoLevel = clamp01(amount);
+  if (autoLevel <= 0) {
+    return buffer;
+  }
+
+  const wet = applyDynamicLeveling(
+    buffer,
+    {
+      windowMs: 160 + autoLevel * 60,
+      quietThresholdDB: -40 - autoLevel * 8,
+      expansionRatio: 1.02 + autoLevel * 0.18,
+      maxGainDB: 0.5 + autoLevel * 1.5,
+      minGainDB: -(1.5 + autoLevel * 3.5),
+      crestThresholdDB: 14 - autoLevel * 3,
+      attackMs: 18 - autoLevel * 8,
+      releaseMs: 120 + autoLevel * 80,
+      lookaheadMs: 5,
+      targetGain: 1.0,
+      peakLimit: Math.pow(10, Math.min(-0.3, truePeakCeiling) / 20)
+    }
+  );
+
+  return mixBuffers(buffer, wet, 0.18 + autoLevel * 0.42);
 }
 
 /**
@@ -597,95 +777,6 @@ function normalizeChannelsToLUFS(channels, sampleRate, id, targetLUFS = -14, cei
 }
 
 // ============================================================================
-// Mastering Soft Clipper (Worker-compatible version)
-// ============================================================================
-
-/**
- * Apply mastering-grade soft clipper to channels
- * Uses lookahead and tanh saturation for transparent peak control
- */
-function applyMasteringSoftClipToChannels(channels, sampleRate, ceilingDB = -1, lookaheadMs = 0.5, releaseMs = 10, drive = 1.5) {
-  const numChannels = channels.length;
-  const length = channels[0].length;
-
-  const ceilingLin = Math.pow(10, ceilingDB / 20);
-  const thresholdLin = Math.pow(10, (ceilingDB + 3) / 20); // Start 3dB above ceiling
-  const lookaheadSamples = Math.floor(sampleRate * lookaheadMs / 1000);
-  const releaseCoef = Math.exp(-1 / (releaseMs * sampleRate / 1000));
-
-  // Calculate gain envelope from all channels
-  const gainEnvelope = new Float32Array(length);
-  gainEnvelope.fill(1.0);
-
-  for (let ch = 0; ch < numChannels; ch++) {
-    const input = channels[ch];
-
-    for (let i = 0; i < length; i++) {
-      const abs = Math.abs(input[i]);
-
-      if (abs > thresholdLin) {
-        // Calculate required gain reduction using tanh saturation
-        const excess = abs - thresholdLin;
-        const range = ceilingLin - thresholdLin;
-        const normalized = excess / Math.max(range, 0.001);
-        const saturated = Math.tanh(normalized * drive);
-        const targetLevel = thresholdLin + saturated * range;
-        const requiredGain = targetLevel / abs;
-
-        // Apply to lookahead window
-        const startIdx = Math.max(0, i - lookaheadSamples);
-        const lookaheadRange = Math.max(1, i - startIdx);
-        for (let j = startIdx; j <= i; j++) {
-          // Interpolate gain reduction across lookahead
-          const t = (i === startIdx) ? 1.0 : (j - startIdx) / lookaheadRange;
-          const interpolatedGain = 1.0 + (requiredGain - 1.0) * t;
-          gainEnvelope[j] = Math.min(gainEnvelope[j], interpolatedGain);
-        }
-      }
-    }
-  }
-
-  // Smooth gain envelope with release
-  let currentGain = 1.0;
-  for (let i = 0; i < length; i++) {
-    if (gainEnvelope[i] < currentGain) {
-      currentGain = gainEnvelope[i];
-    } else {
-      currentGain = releaseCoef * currentGain + (1 - releaseCoef) * 1.0;
-      currentGain = Math.min(currentGain, 1.0);
-    }
-    gainEnvelope[i] = currentGain;
-  }
-
-  // Apply gain and final soft clip
-  const outputChannels = [];
-  for (let ch = 0; ch < numChannels; ch++) {
-    const input = channels[ch];
-    const output = new Float32Array(length);
-
-    for (let i = 0; i < length; i++) {
-      // Apply gain envelope
-      let sample = input[i] * gainEnvelope[i];
-
-      // Final safety soft clip
-      const abs = Math.abs(sample);
-      if (abs > ceilingLin) {
-        // Gentle tanh saturation for anything still over ceiling
-        const excess = (abs - ceilingLin) / ceilingLin;
-        const reduction = 1 - Math.tanh(excess * 2) * 0.1;
-        sample = Math.sign(sample) * Math.min(abs * reduction, ceilingLin);
-      }
-
-      output[i] = sample;
-    }
-
-    outputChannels.push(output);
-  }
-
-  return outputChannels;
-}
-
-// ============================================================================
 // Spectral Noise Reduction (Worker-compatible version)
 // ============================================================================
 
@@ -1207,6 +1298,7 @@ function applyStereoProcessingToChannels(channels, sampleRate, id, options = {})
   const balance = options.balance ?? 0.0;
   const midGain = options.midGain ?? 0;
   const sideGain = options.sideGain ?? 0;
+  const depth = clamp01(options.depth ?? 0);
 
   const left = channels[0];
   const right = channels[1];
@@ -1265,12 +1357,16 @@ function applyStereoProcessingToChannels(channels, sampleRate, id, options = {})
     processedSideFinal[i] = processedSide[i] * sideGainLin;
   }
 
+  const depthEnhancedSide = depth > 0
+    ? enhanceStereoDepth(processedSideFinal, sampleRate, depth)
+    : processedSideFinal;
+
   report(0.6, 'Applying width...');
 
   // Decode back to L/R
   for (let i = 0; i < length; i++) {
-    outLeft[i] = processedMid[i] + processedSideFinal[i];
-    outRight[i] = processedMid[i] - processedSideFinal[i];
+    outLeft[i] = processedMid[i] + depthEnhancedSide[i];
+    outRight[i] = processedMid[i] - depthEnhancedSide[i];
   }
 
   // Apply balance
@@ -1367,8 +1463,12 @@ function applyParametricEQ(buffer, settings) {
     outBuffer = applyEQBand(outBuffer, calcHighShelfCoeffs(sampleRate, 12000, eqValues.high, 0.707));
   }
 
-  // 6. Cut Mud (250Hz, -3dB, Q=1.5)
-  if (settings.cutMud) {
+  const mudCutDb = Number(settings.mudCutDb);
+
+  // 6. Cut Mud (250Hz, scalable attenuation)
+  if (Number.isFinite(mudCutDb) && mudCutDb < 0) {
+    outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 250, mudCutDb, 1.5));
+  } else if (settings.cutMud) {
     outBuffer = applyEQBand(outBuffer, calcPeakingCoeffs(sampleRate, 250, -3.0, 1.5));
   }
 
@@ -1379,7 +1479,7 @@ function applyParametricEQ(buffer, settings) {
  * Apply Glue Compressor (Stereo Linked)
  */
 function applyGlueCompressor(buffer, options) {
-  const { threshold, ratio, attack, release, knee } = options;
+  const { threshold, ratio, attack, release } = options;
   const sampleRate = buffer.sampleRate;
   const numChannels = buffer.numberOfChannels;
 
@@ -1420,10 +1520,7 @@ function applyGlueCompressor(buffer, options) {
       envelope = releaseCoef * envelope + (1 - releaseCoef) * inputAbs;
     }
 
-    // Knee & Ratio
-    // Simple hard knee logic for now, or soft knee if needed
-    // Using hard knee for simplicity as "Glue" often implies character
-    // Use standard compressor gain reduction
+    // Intentional hard-knee glue compression.
     let gain = 1.0;
     if (envelope > thresholdLin) {
       const overDB = 20 * Math.log10(envelope / thresholdLin);
@@ -1460,13 +1557,22 @@ function hasLinearOnlySettings(settings) {
     Number(settings.eqHigh) || 0
   ];
 
+  const clarityAmount = normalizeAmount(settings.clarityAmount);
+  const airAmount = normalizeAmount(settings.airAmount);
+  const warmthAmount = normalizeAmount(settings.warmthAmount);
+  const lowEndCleanAmount = normalizeAmount(settings.lowEndCleanAmount);
+  const glueAmount = normalizeAmount(settings.glueCompressionAmount);
+  const autoLevelAmount = normalizeAmount(settings.autoLevelAmount);
+  const depthAmount = normalizeAmount(settings.spaceDepthAmount);
+
   return (
-    !settings.deharsh &&
-    !settings.addAir &&
-    !settings.tapeWarmth &&
-    !settings.addPunch &&
-    !settings.cleanLowEnd &&
-    !settings.glueCompression &&
+    clarityAmount === 0 &&
+    airAmount === 0 &&
+    warmthAmount === 0 &&
+    autoLevelAmount === 0 &&
+    lowEndCleanAmount === 0 &&
+    glueAmount === 0 &&
+    depthAmount === 0 &&
     !settings.centerBass &&
     Math.abs((Number(settings.stereoWidth) || 100) - 100) < 1e-6 &&
     eqValues.every((value) => value === 0)
@@ -1677,6 +1783,15 @@ self.onmessage = async (e) => {
         // Track level through the chain
         console.log(`[Worker Chain] Starting render (Mode: ${mode})`);
 
+        const clarityAmount = normalizeAmount(settings.clarityAmount);
+        const airAmount = normalizeAmount(settings.airAmount);
+        const warmthAmount = normalizeAmount(settings.warmthAmount);
+        const lowEndCleanAmount = normalizeAmount(settings.lowEndCleanAmount);
+        const glueAmount = normalizeAmount(settings.glueCompressionAmount);
+        const autoLevelAmount = normalizeAmount(settings.autoLevelAmount);
+        const depthAmount = normalizeAmount(settings.spaceDepthAmount);
+        const truePeakCeiling = settings.truePeakCeiling || -1;
+
         // --- HEAVY FX (Shared) ---
 
         // 0. Input Gain (pre-FX, pre-limiter)
@@ -1693,27 +1808,34 @@ self.onmessage = async (e) => {
         }
 
         // 1. Deharsh / Hybrid Dynamic Processor (if enabled)
-        if (settings.deharsh) {
+        if (clarityAmount > 0) {
           sendProgress(id, 0.15, 'Applying hybrid dynamic processor...');
-          buffer = processHybridDynamic(buffer, 'mastering');
+          buffer = applyClarityProcessing(buffer, clarityAmount);
         }
 
         // 2. Exciter / Add Air (if enabled)
-        if (settings.addAir) {
+        if (airAmount > 0) {
           sendProgress(id, 0.3, 'Applying exciter...');
-          buffer = applyExciter(buffer);
+          buffer = applyAirProcessing(buffer, airAmount);
         }
 
         // 3. Multiband Saturation / Tape Warmth (if enabled)
-        if (settings.tapeWarmth) {
+        if (warmthAmount > 0) {
           sendProgress(id, 0.45, 'Applying multiband saturation...');
-          buffer = applyTapeWarmth(buffer);
+          buffer = applyWarmthProcessing(buffer, warmthAmount);
         }
 
-        // 4. Multiband Transient / Add Punch (if enabled)
-        if (settings.addPunch) {
-          sendProgress(id, 0.55, 'Applying multiband transient...');
-          buffer = applyMultibandTransient(buffer);
+        // 4. Dynamic leveling / Auto level strength
+        if (autoLevelAmount > 0) {
+          sendProgress(id, 0.55, 'Applying auto leveling...');
+          buffer = applyAutoLevelProcessing(buffer, autoLevelAmount, truePeakCeiling);
+        }
+
+        // 4.5 Optional transient enhancement for high punch settings
+        if (autoLevelAmount >= 0.55) {
+          sendProgress(id, 0.58, 'Applying transient enhancement...');
+          const transientWet = applyMultibandTransient(buffer);
+          buffer = mixBuffers(buffer, transientWet, 0.10 + (autoLevelAmount - 0.55) * 0.35);
         }
 
         // --- PREVIEW MODE END ---
@@ -1779,24 +1901,28 @@ self.onmessage = async (e) => {
         // HPF is controlled by Clean Low End; LPF is always applied as final cleanup.
         sendProgress(id, 0.60, 'Applying final filters...');
         buffer = applyFinalFilters(buffer, {
-          highpass: !!settings.cleanLowEnd,
+          highpass: lowEndCleanAmount > 0,
+          highpassFreq: 22 + lowEndCleanAmount * 18,
           lowpass: settings.presetId !== 'none'
         });
 
         // 6. EQ (5-Band) + Cut Mud
         sendProgress(id, 0.65, 'Applying EQ...');
-        buffer = applyParametricEQ(buffer, settings);
+        buffer = applyParametricEQ(buffer, {
+          ...settings,
+          mudCutDb: lowEndCleanAmount > 0 ? -(0.5 + lowEndCleanAmount * 2.5) : 0
+        });
 
         // 7. Glue Compressor
-        if (settings.glueCompression) {
+        if (glueAmount > 0) {
           sendProgress(id, 0.70, 'Applying glue compressor...');
-          buffer = applyGlueCompressor(buffer, {
-            threshold: -18,
-            ratio: 3,
-            attack: 0.02,
-            release: 0.25,
-            knee: 10
+          const glued = applyGlueCompressor(buffer, {
+            threshold: -12 - glueAmount * 10,
+            ratio: 1.35 + glueAmount * 1.9,
+            attack: 0.03 - glueAmount * 0.018,
+            release: 0.28 - glueAmount * 0.12
           });
+          buffer = mixBuffers(buffer, glued, 0.22 + glueAmount * 0.48);
         }
 
         // 7.5 Stereo processing (Width + Center Bass)
@@ -1806,14 +1932,23 @@ self.onmessage = async (e) => {
           const width = Number.isFinite(stereoWidthValue) ? stereoWidthValue / 100 : 1.0;
           const clampedWidth = Math.max(0, Math.min(2, width));
           const bassMono = !!settings.centerBass;
+          const sideGain = depthAmount * 0.9;
+          const midGain = -depthAmount * 0.45;
 
-          if (bassMono || Math.abs(clampedWidth - 1.0) > 1e-6) {
+          if (bassMono || Math.abs(clampedWidth - 1.0) > 1e-6 || depthAmount > 0) {
             sendProgress(id, 0.72, 'Applying stereo processing...');
             const processed = applyStereoProcessingToChannels(
               [buffer.getChannelData(0), buffer.getChannelData(1)],
               buffer.sampleRate,
               null,
-              { width: clampedWidth, bassMono, bassFreq: 200 }
+              {
+                width: clampedWidth,
+                bassMono,
+                bassFreq: bassMono ? 200 : 160,
+                midGain,
+                sideGain,
+                depth: depthAmount
+              }
             );
             buffer.copyToChannel(processed[0], 0);
             buffer.copyToChannel(processed[1], 1);
