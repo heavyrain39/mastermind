@@ -160,8 +160,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
         currentGain.gain.setValueAtTime(currentGain.gain.value, ctx.currentTime);
-        currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-        await new Promise((r) => setTimeout(r, 60));
+        currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+        await new Promise((r) => setTimeout(r, 25));
       }
       target.pause();
       setPlayingMode(null);
@@ -174,8 +174,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = otherGain.context as AudioContext;
         otherGain.gain.cancelScheduledValues(ctx.currentTime);
         otherGain.gain.setValueAtTime(otherGain.gain.value, ctx.currentTime);
-        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-        await new Promise((r) => setTimeout(r, 60));
+        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+        await new Promise((r) => setTimeout(r, 25));
       }
       other.pause();
     }
@@ -186,7 +186,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
         currentGain.gain.setValueAtTime(0, ctx.currentTime);
-        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.02);
       }
       await target.play();
       setPlayingMode(mode);
@@ -204,8 +204,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
       const ctx = gain.context as AudioContext;
       gain.gain.cancelScheduledValues(ctx.currentTime);
       gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-      await new Promise((r) => setTimeout(r, 60));
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+      await new Promise((r) => setTimeout(r, 25));
     }
 
     target.pause();
@@ -235,8 +235,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = otherGain.context as AudioContext;
         otherGain.gain.cancelScheduledValues(ctx.currentTime);
         otherGain.gain.setValueAtTime(otherGain.gain.value, ctx.currentTime);
-        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-        await new Promise((r) => setTimeout(r, 60));
+        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+        await new Promise((r) => setTimeout(r, 25));
       }
       other.pause();
     }
@@ -246,8 +246,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
       const ctx = currentGain.context as AudioContext;
       currentGain.gain.cancelScheduledValues(ctx.currentTime);
       currentGain.gain.setValueAtTime(currentGain.gain.value, ctx.currentTime);
-      currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-      await new Promise((r) => setTimeout(r, 60));
+      currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.02);
+      await new Promise((r) => setTimeout(r, 25));
     }
 
     // Pause before seek to prevent audible buffer jumps
@@ -265,7 +265,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
         currentGain.gain.setValueAtTime(0, ctx.currentTime);
-        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.02);
       }
       await target.play();
       setPlayingMode(mode);
