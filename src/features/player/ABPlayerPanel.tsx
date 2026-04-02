@@ -154,23 +154,28 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     if (mode === "A" && !hasOriginal) return;
     if (mode === "B" && !hasMastered) return;
 
+    // Toggle current track OFF
     if (playingMode === mode && !target.paused) {
       if (currentGain) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
+        currentGain.gain.setValueAtTime(currentGain.gain.value, ctx.currentTime);
         currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-        await new Promise((r) => setTimeout(r, 55));
+        await new Promise((r) => setTimeout(r, 60));
       }
       target.pause();
       setPlayingMode(null);
       return;
     }
 
+    // Switching from other track
     if (other && !other.paused) {
       if (otherGain) {
         const ctx = otherGain.context as AudioContext;
         otherGain.gain.cancelScheduledValues(ctx.currentTime);
+        otherGain.gain.setValueAtTime(otherGain.gain.value, ctx.currentTime);
         otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+        await new Promise((r) => setTimeout(r, 60));
       }
       other.pause();
     }
@@ -198,8 +203,9 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     if (gain && !target.paused) {
       const ctx = gain.context as AudioContext;
       gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-      await new Promise((r) => setTimeout(r, 55));
+      await new Promise((r) => setTimeout(r, 60));
     }
 
     target.pause();
@@ -223,22 +229,29 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     const hasAudio = mode === "A" ? hasOriginal : hasMastered;
     if (!target || !hasAudio) return;
 
+    // Fade down 'other' track if playing
     if (other && !other.paused) {
       if (otherGain) {
         const ctx = otherGain.context as AudioContext;
         otherGain.gain.cancelScheduledValues(ctx.currentTime);
+        otherGain.gain.setValueAtTime(otherGain.gain.value, ctx.currentTime);
         otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+        await new Promise((r) => setTimeout(r, 60));
       }
       other.pause();
     }
 
+    // Fade down 'current' track if playing before seek
     if (currentGain && !target.paused) {
       const ctx = currentGain.context as AudioContext;
       currentGain.gain.cancelScheduledValues(ctx.currentTime);
+      currentGain.gain.setValueAtTime(currentGain.gain.value, ctx.currentTime);
       currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
-      await new Promise((r) => setTimeout(r, 55));
+      await new Promise((r) => setTimeout(r, 60));
     }
 
+    // Pause before seek to prevent audible buffer jumps
+    target.pause();
     target.currentTime = nextTime;
     if (mode === "A") {
       setCurrentTimeA(nextTime);
