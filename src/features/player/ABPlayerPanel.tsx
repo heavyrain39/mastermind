@@ -38,6 +38,8 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const tips = getUiTips(locale);
   const audioOriginalRef = useRef<HTMLAudioElement>(null);
   const audioMasteredRef = useRef<HTMLAudioElement>(null);
+  const gainRefA = useRef<GainNode | null>(null);
+  const gainRefB = useRef<GainNode | null>(null);
   const decodeContextRef = useRef<AudioContext | null>(null);
 
   const trackLabel = activeTrack ? activeTrack.fileName : "No track selected";
@@ -62,11 +64,20 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.8;
 
+    const gainA = ctx.createGain();
+    const gainB = ctx.createGain();
+    gainRefA.current = gainA;
+    gainRefB.current = gainB;
+
     const srcOg = ctx.createMediaElementSource(og);
     const srcMt = ctx.createMediaElementSource(mt);
 
-    srcOg.connect(analyser);
-    srcMt.connect(analyser);
+    srcOg.connect(gainA);
+    gainA.connect(analyser);
+
+    srcMt.connect(gainB);
+    gainB.connect(analyser);
+
     analyser.connect(ctx.destination);
 
     globalVisualizerContext.analyser = analyser;
@@ -136,22 +147,42 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const togglePlay = async (mode: PlaybackMode) => {
     const target = mode === "A" ? audioOriginalRef.current : audioMasteredRef.current;
     const other = mode === "A" ? audioMasteredRef.current : audioOriginalRef.current;
+    const currentGain = mode === "A" ? gainRefA.current : gainRefB.current;
+    const otherGain = mode === "A" ? gainRefB.current : gainRefA.current;
+
     if (!target) return;
     if (mode === "A" && !hasOriginal) return;
     if (mode === "B" && !hasMastered) return;
 
     if (playingMode === mode && !target.paused) {
+      if (currentGain) {
+        const ctx = currentGain.context as AudioContext;
+        currentGain.gain.cancelScheduledValues(ctx.currentTime);
+        currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+        await new Promise((r) => setTimeout(r, 55));
+      }
       target.pause();
       setPlayingMode(null);
       return;
     }
 
     if (other && !other.paused) {
+      if (otherGain) {
+        const ctx = otherGain.context as AudioContext;
+        otherGain.gain.cancelScheduledValues(ctx.currentTime);
+        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+      }
       other.pause();
     }
 
     try {
       await globalVisualizerContext.resume();
+      if (currentGain) {
+        const ctx = currentGain.context as AudioContext;
+        currentGain.gain.cancelScheduledValues(ctx.currentTime);
+        currentGain.gain.setValueAtTime(0, ctx.currentTime);
+        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+      }
       await target.play();
       setPlayingMode(mode);
     } catch {
@@ -159,9 +190,18 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     }
   };
 
-  const stopMode = (mode: PlaybackMode) => {
+  const stopMode = async (mode: PlaybackMode) => {
     const target = mode === "A" ? audioOriginalRef.current : audioMasteredRef.current;
+    const gain = mode === "A" ? gainRefA.current : gainRefB.current;
     if (!target) return;
+
+    if (gain && !target.paused) {
+      const ctx = gain.context as AudioContext;
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+      await new Promise((r) => setTimeout(r, 55));
+    }
+
     target.pause();
     target.currentTime = 0;
     if (mode === "A") {
@@ -177,11 +217,26 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const seekAndPlayMode = async (mode: PlaybackMode, nextTime: number) => {
     const target = mode === "A" ? audioOriginalRef.current : audioMasteredRef.current;
     const other = mode === "A" ? audioMasteredRef.current : audioOriginalRef.current;
+    const currentGain = mode === "A" ? gainRefA.current : gainRefB.current;
+    const otherGain = mode === "A" ? gainRefB.current : gainRefA.current;
+
     const hasAudio = mode === "A" ? hasOriginal : hasMastered;
     if (!target || !hasAudio) return;
 
     if (other && !other.paused) {
+      if (otherGain) {
+        const ctx = otherGain.context as AudioContext;
+        otherGain.gain.cancelScheduledValues(ctx.currentTime);
+        otherGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+      }
       other.pause();
+    }
+
+    if (currentGain && !target.paused) {
+      const ctx = currentGain.context as AudioContext;
+      currentGain.gain.cancelScheduledValues(ctx.currentTime);
+      currentGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+      await new Promise((r) => setTimeout(r, 55));
     }
 
     target.currentTime = nextTime;
@@ -193,6 +248,12 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
 
     try {
       await globalVisualizerContext.resume();
+      if (currentGain) {
+        const ctx = currentGain.context as AudioContext;
+        currentGain.gain.cancelScheduledValues(ctx.currentTime);
+        currentGain.gain.setValueAtTime(0, ctx.currentTime);
+        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+      }
       await target.play();
       setPlayingMode(mode);
     } catch {
