@@ -42,9 +42,14 @@ if ($LASTEXITCODE -eq 0) {
     if (Test-Path -LiteralPath $ZipPath) {
         Remove-Item -LiteralPath $ZipPath -Force
     }
-    # Pass the top-level entries explicitly so the archive contains
-    # manifest.json at the ZIP root (and not under a ./ prefix).
-    tar.exe -a -cf $ZipPath -C "dist-ext" manifest.json index.html background.js icon-16.png icon-48.png favicon.png assets
+    # Pass every top-level build entry by name so manifest.json stays at the
+    # ZIP root (without a ./ prefix) and new build assets cannot be omitted.
+    $ArchiveEntries = @("manifest.json")
+    $ArchiveEntries += Get-ChildItem -LiteralPath "dist-ext" |
+        Where-Object { $_.Name -ne "manifest.json" } |
+        Sort-Object -Property Name |
+        Select-Object -ExpandProperty Name
+    tar.exe -a -cf $ZipPath -C "dist-ext" $ArchiveEntries
     if ($LASTEXITCODE -ne 0) {
         throw "Extension packaging failed."
     }

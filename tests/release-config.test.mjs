@@ -17,8 +17,7 @@ test("documented build commands exist", async () => {
 
 test("extension packaging keeps manifest at the ZIP root", async () => {
   const buildScript = await readFile(new URL("../scripts/build-ext.ps1", import.meta.url), "utf8");
-  assert.match(
-    buildScript,
-    /-C\s+"dist-ext"\s+manifest\.json\s+index\.html\s+background\.js\s+icon-16\.png\s+icon-48\.png\s+favicon\.png\s+assets/
-  );
+  assert.match(buildScript, /\$ArchiveEntries\s*=\s*@\("manifest\.json"\)/);
+  assert.match(buildScript, /Get-ChildItem\s+-LiteralPath\s+"dist-ext"/);
+  assert.match(buildScript, /tar\.exe\s+-a\s+-cf\s+\$ZipPath\s+-C\s+"dist-ext"\s+\$ArchiveEntries/);
 });
