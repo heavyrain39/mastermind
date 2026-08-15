@@ -5,8 +5,8 @@
     "description": "Your clever audio mastering ally.",
     "action": {
         "default_icon": {
-            "16": "icon-16.png",
-            "48": "icon-48.png",
+            "16": "favicon.png",
+            "48": "favicon.png",
             "128": "favicon.png"
         }
     },
@@ -15,8 +15,8 @@
         "type": "module"
     },
     "icons": {
-        "16": "icon-16.png",
-        "48": "icon-48.png",
+        "16": "favicon.png",
+        "48": "favicon.png",
         "128": "favicon.png"
     }
 }
