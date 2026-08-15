@@ -42,7 +42,9 @@ if ($LASTEXITCODE -eq 0) {
     if (Test-Path -LiteralPath $ZipPath) {
         Remove-Item -LiteralPath $ZipPath -Force
     }
-    tar.exe -a -cf $ZipPath -C "dist-ext" .
+    # Pass the top-level entries explicitly so the archive contains
+    # manifest.json at the ZIP root (and not under a ./ prefix).
+    tar.exe -a -cf $ZipPath -C "dist-ext" manifest.json index.html background.js assets
     if ($LASTEXITCODE -ne 0) {
         throw "Extension packaging failed."
     }

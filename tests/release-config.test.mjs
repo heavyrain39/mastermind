@@ -14,3 +14,8 @@ test("documented build commands exist", async () => {
     assert.equal(typeof packageJson.scripts[script], "string", `missing script: ${script}`);
   }
 });
+
+test("extension packaging keeps manifest at the ZIP root", async () => {
+  const buildScript = await readFile(new URL("../scripts/build-ext.ps1", import.meta.url), "utf8");
+  assert.match(buildScript, /-C\s+"dist-ext"\s+manifest\.json\s+index\.html\s+background\.js\s+assets/);
+});

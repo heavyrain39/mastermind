@@ -37,7 +37,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const [durationB, setDurationB] = useState(0);
   const [wavePeaksA, setWavePeaksA] = useState<number[] | null>(null);
   const [wavePeaksB, setWavePeaksB] = useState<number[] | null>(null);
-  const [loudnessMatched, setLoudnessMatched] = useState(true);
+  const [loudnessMatched, setLoudnessMatched] = useState(false);
   const tips = getUiTips(locale);
   const audioOriginalRef = useRef<HTMLAudioElement>(null);
   const audioMasteredRef = useRef<HTMLAudioElement>(null);
@@ -326,7 +326,10 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
       <div className="panel-head">
         <h2>A/B Monitor</h2>
         <div className="ab-head-tools">
-          <label className="ab-match-toggle">
+          <label
+            className="ab-match-toggle"
+            title="Match playback loudness for a fair A/B comparison"
+          >
             <input
               type="checkbox"
               checked={loudnessMatched}
