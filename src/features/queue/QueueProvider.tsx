@@ -10,7 +10,8 @@ import {
 import { generateZipInWorker } from "../../lib/audio/zip";
 import { type TrackItem } from "../../shared/types/audio";
 import { type MasteringSettings } from "../../shared/types/mastering";
-import { audioBufferToWavBlob, resampleAudioBuffer } from "../../lib/audio/wav";
+import { resampleAudioBuffer } from "../../lib/audio/wav";
+import { encodeWavInWorker, terminateWavWorker } from "../../lib/audio/wavWorkerClient";
 import { encodeMp3 } from "../../lib/audio/mp3";
 import { type DSPWorkerClient, type FullChainSettings, getDSPWorkerClient } from "../../lib/dsp/dspWorkerClient";
 import {
@@ -19,7 +20,7 @@ import {
   getPresetSettings,
   type MasteringPresetId
 } from "../mastering/presets";
-import * as mmb from "music-metadata-browser";
+import { parseBlob } from "music-metadata";
 
 interface QueueContextValue {
   tracks: TrackItem[];
@@ -43,6 +44,8 @@ interface QueueContextValue {
   isDownloadingZip: boolean;
   downloadingTrackIds: string[];
   downloadProgress: Map<string, number>;
+  notice: string | null;
+  clearNotice: () => void;
 }
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -58,6 +61,7 @@ const LEGACY_STORAGE_KEYS = {
 } as const;
 
 const DEFAULT_MASTERING_SETTINGS = getPresetSettings(DEFAULT_PRESET_ID);
+const MAX_TRACKS = 50;
 const OUTPUT_SETTING_KEYS: Array<keyof MasteringSettings> = [
   "sampleRate",
   "bitDepth",
@@ -74,6 +78,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [downloadingTrackIds, setDownloadingTrackIds] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Map<string, number>>(new Map());
+  const [notice, setNotice] = useState<string | null>(null);
   const cancelRef = useRef(false);
   const initialMasteringStateRef = useRef<{
     presetId: MasteringPresetId;
@@ -129,15 +134,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const cancelProcessing = () => {
     cancelRef.current = true;
+    workerClientRef.current?.terminate();
   };
 
   const addFiles = (files: File[]) => {
-    const wavFiles = files.filter(isSupportedAudioFile);
-    if (wavFiles.length === 0) return;
+    const supportedFiles = files.filter(isSupportedAudioFile);
+    const availableSlots = Math.max(0, MAX_TRACKS - tracksRef.current.length);
+    const acceptedFiles = supportedFiles.slice(0, availableSlots);
+    if (acceptedFiles.length === 0) {
+      setNotice(availableSlots === 0
+        ? `The queue is limited to ${MAX_TRACKS} tracks.`
+        : "No supported audio files were selected.");
+      return;
+    }
 
-    const createdTracks = wavFiles.map((file) => createTrack(file, sequenceRef.current++));
+    const createdTracks = acceptedFiles.map((file) => createTrack(file, sequenceRef.current++));
+    tracksRef.current = [...tracksRef.current, ...createdTracks];
     setTracks((prev) => [...prev, ...createdTracks]);
     setActiveTrackIdState((prev) => prev ?? createdTracks[0]?.id ?? null);
+
+    if (acceptedFiles.length < supportedFiles.length) {
+      setNotice(`Added ${acceptedFiles.length} tracks. The queue is limited to ${MAX_TRACKS}.`);
+    } else if (supportedFiles.length < files.length) {
+      setNotice("Unsupported files were skipped.");
+    } else {
+      setNotice(null);
+    }
 
     // 비동기 메타데이터 추출 (Background pre-cache)
     createdTracks.forEach((track) => {
@@ -148,7 +170,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const ensureMetadata = async (track: TrackItem) => {
     if (track.metadata) return track.metadata;
     try {
-      const metadata = await mmb.parseBlob(track.sourceFile);
+      const metadata = await parseBlob(track.sourceFile);
       setTracks((prev) =>
         prev.map((t) => (t.id === track.id ? { ...t, metadata } : t))
       );
@@ -160,19 +182,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   };
 
   const clearQueue = () => {
-    setTracks((prev) => {
-      prev.forEach(revokeTrackUrls);
-      return [];
-    });
+    tracksRef.current.forEach(revokeTrackUrls);
+    tracksRef.current = [];
+    setTracks([]);
     setActiveTrackIdState(null);
   };
 
   const removeTrack = (trackId: string) => {
-    setTracks((prev) => {
-      const target = prev.find((track) => track.id === trackId);
-      if (target) revokeTrackUrls(target);
-      return prev.filter((track) => track.id !== trackId);
-    });
+    const target = tracksRef.current.find((track) => track.id === trackId);
+    if (target) revokeTrackUrls(target);
+    tracksRef.current = tracksRef.current.filter((track) => track.id !== trackId);
+    setTracks(tracksRef.current);
     setActiveTrackIdState((prev) => (prev === trackId ? null : prev));
   };
 
@@ -188,7 +208,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const downloadTrack = async (trackId: string) => {
     const target = tracksRef.current.find((track) => track.id === trackId);
-    if (!target?.masteredBuffer || !target.masteredUrl) return;
+    if (!target?.masteredUrl) return;
 
     const settings = settingsRef.current;
 
@@ -197,15 +217,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     try {
       const metadata = await ensureMetadata(target);
+      const decodedMaster = await decodeUrlToAudioBuffer(target.masteredUrl, getDecodeContext(decodeContextRef));
+      const outputBuffer = await resampleAudioBuffer(decodedMaster, settings.sampleRate);
       if (settings.outputFormat === "wav") {
-        triggerDownload(
-          target.masteredUrl,
-          deriveMasteredFileName(target.fileName, "wav")
-        );
+        const wavBlob = await encodeWavInWorker(outputBuffer, {
+          bitDepth: settings.bitDepth,
+          ditherMode: settings.ditherMode,
+          metadata
+        });
+        const url = URL.createObjectURL(wavBlob);
+        triggerDownload(url, deriveMasteredFileName(target.fileName, "wav"));
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
         return;
       }
 
-      const outputBuffer = await resampleAudioBuffer(target.masteredBuffer, settings.sampleRate);
       const mp3Blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, (percent) => {
         setDownloadProgress((prev) => { const next = new Map(prev); next.set(trackId, percent); return next; });
       }, metadata);
@@ -217,8 +242,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       );
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (error) {
-      console.error("MP3 Encoding failed:", error);
-      alert(`MP3 인코딩에 실패했습니다. (Error: ${error instanceof Error ? error.message : "Unknown"})`);
+      console.error("Download failed:", error);
+      setNotice(`Download failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setDownloadingTrackIds((prev) => prev.filter((id) => id !== trackId));
       setDownloadProgress((prev) => { const next = new Map(prev); next.delete(trackId); return next; });
@@ -226,38 +251,41 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   };
 
   const downloadDoneTracksZip = async () => {
-    const doneTracks = tracksRef.current.filter((track) => track.status === "done" && track.masteredBuffer);
+    const doneTracks = tracksRef.current.filter((track) => track.status === "done" && track.masteredUrl);
     if (doneTracks.length === 0) return;
 
     setIsDownloadingZip(true);
     const settings = settingsRef.current;
-    const filesToZip: { name: string; data: Blob }[] = [];
-
     try {
       // 병렬 MP3 인코딩 처리 (최대 4개)
       const CONCURRENCY = 4;
       const queue = [...doneTracks];
       const filesToZip: { name: string; data: Blob }[] = [];
+      const uniqueNames = createUniqueFileNames(
+        doneTracks.map((track) => deriveMasteredFileName(track.fileName, settings.outputFormat))
+      );
+      const fileNamesByTrackId = new Map(doneTracks.map((track, index) => [track.id, uniqueNames[index]]));
 
       const encodeTask = async () => {
         while (queue.length > 0) {
           const track = queue.shift();
           if (!track) break;
 
-          const fileName = deriveMasteredFileName(track.fileName, settings.outputFormat);
+          const fileName = fileNamesByTrackId.get(track.id)!;
           let blob: Blob;
+          const decodedMaster = await decodeUrlToAudioBuffer(track.masteredUrl!, getDecodeContext(decodeContextRef));
+          const outputBuffer = await resampleAudioBuffer(decodedMaster, settings.sampleRate);
 
-          if (settings.outputFormat === "wav" && track.masteredUrl) {
-            const response = await fetch(track.masteredUrl);
-            blob = await response.blob();
-          } else if (settings.outputFormat === "mp3") {
+          if (settings.outputFormat === "mp3") {
             const trackMetadata = await ensureMetadata(track);
-            const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
             blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, undefined, trackMetadata);
           } else {
             const trackMetadata = await ensureMetadata(track);
-            const outputBuffer = await resampleAudioBuffer(track.masteredBuffer!, settings.sampleRate);
-            blob = audioBufferToWavBlob(outputBuffer, { bitDepth: settings.bitDepth, ditherMode: settings.ditherMode, metadata: trackMetadata });
+            blob = await encodeWavInWorker(outputBuffer, {
+              bitDepth: settings.bitDepth,
+              ditherMode: settings.ditherMode,
+              metadata: trackMetadata
+            });
           }
 
           filesToZip.push({ name: fileName, data: blob });
@@ -274,7 +302,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       window.setTimeout(() => URL.revokeObjectURL(zipUrl), 2000);
     } catch (error) {
       console.error("ZIP Generation failed:", error);
-      alert(`파일 변환 및 다운로드에 실패했습니다. (Error: ${error instanceof Error ? error.message : "Unknown"})`);
+      setNotice(`ZIP download failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsDownloadingZip(false);
     }
@@ -413,16 +441,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             )
           );
 
-          const outputBuffer = await resampleAudioBuffer(masteredBuffer, selectedSettings.sampleRate);
-          const masteredBlob = audioBufferToWavBlob(outputBuffer, {
-            bitDepth: selectedSettings.bitDepth,
-            ditherMode: selectedSettings.ditherMode,
+          const masteredBlob = await encodeWavInWorker(masteredBuffer, {
+            bitDepth: 24,
+            ditherMode: "none",
             metadata: trackMetadata
           });
+          if (cancelRef.current) return;
           const nextMasteredUrl = URL.createObjectURL(masteredBlob);
           const nextFileName = deriveMasteredFileName(
             sourceTrack.fileName,
-            selectedSettings.outputFormat
+            "wav"
           );
 
           let previousMasteredUrl: string | undefined;
@@ -439,7 +467,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 masteredFileName: nextFileName,
                 masteredSizeBytes: masteredBlob.size,
                 masteredPresetId: selectedPresetId === "custom" ? undefined : selectedPresetId,
-                masteredBuffer: masteredBuffer,
                 progressPercent: 100,
                 progressStatus: "Complete",
                 errorMessage: undefined
@@ -455,6 +482,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             URL.revokeObjectURL(previousMasteredUrl);
           }
         } catch (error) {
+          if (cancelRef.current) return;
           const message = error instanceof Error ? error.message : "Mastering failed";
           setTracks((prev) =>
             prev.map((track) =>
@@ -487,7 +515,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         setTracks((prev) =>
           prev.map((track) =>
             track.status === "queued" || track.status === "processing"
-              ? { ...track, status: "idle", progressStatus: undefined, progressPercent: undefined }
+              ? track.masteredUrl
+                ? { ...track, status: "done", progressStatus: "Complete", progressPercent: 100 }
+                : { ...track, status: "idle", progressStatus: undefined, progressPercent: undefined }
               : track
           )
         );
@@ -538,6 +568,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     return () => {
       tracksRef.current.forEach(revokeTrackUrls);
       workerClientRef.current?.terminate();
+      terminateWavWorker();
       if (decodeContextRef.current && decodeContextRef.current.state !== "closed") {
         void decodeContextRef.current.close();
       }
@@ -565,7 +596,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     downloadDoneTracksZip,
     isDownloadingZip,
     downloadingTrackIds,
-    downloadProgress
+    downloadProgress,
+    notice,
+    clearNotice: () => setNotice(null)
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;
@@ -617,7 +650,24 @@ function createTrack(file: File, index: number): TrackItem {
 }
 
 function deriveMasteredFileName(fileName: string, format: "wav" | "mp3" = "wav") {
-  return `${fileName.replace(/\.[^.]+$/, "")}_mastered.${format}`;
+  const safeName = fileName.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "track";
+  return `${safeName.replace(/\.[^.]+$/, "")}_mastered.${format}`;
+}
+
+function createUniqueFileNames(fileNames: string[]) {
+  const used = new Set<string>();
+  return fileNames.map((fileName) => {
+    const dotIndex = fileName.lastIndexOf(".");
+    const stem = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+    const extension = dotIndex > 0 ? fileName.slice(dotIndex) : "";
+    let candidate = fileName;
+    let suffix = 2;
+    while (used.has(candidate.toLocaleLowerCase())) {
+      candidate = `${stem} (${suffix++})${extension}`;
+    }
+    used.add(candidate.toLocaleLowerCase());
+    return candidate;
+  });
 }
 
 function revokeTrackUrls(track: TrackItem) {
@@ -646,8 +696,13 @@ function getDecodeContext(contextRef: { current: AudioContext | null }) {
 
 async function decodeFileToAudioBuffer(file: File, context: AudioContext) {
   const rawBuffer = await file.arrayBuffer();
-  const decodeInput = rawBuffer.slice(0);
-  return context.decodeAudioData(decodeInput);
+  return context.decodeAudioData(rawBuffer);
+}
+
+async function decodeUrlToAudioBuffer(url: string, context: AudioContext) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Could not read mastered audio (${response.status})`);
+  return context.decodeAudioData(await response.arrayBuffer());
 }
 
 function ensureStereoBuffer(buffer: AudioBuffer) {

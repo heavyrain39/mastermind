@@ -11,6 +11,14 @@
  */
 export function applyBiquadFilter(samples, coeffs) {
   const output = new Float32Array(samples.length);
+  return applyBiquadFilterInto(samples, output, coeffs);
+}
+
+/**
+ * Apply a biquad filter into a caller-owned buffer. Input and output may be
+ * the same array, allowing repeated filter stages to reuse one allocation.
+ */
+export function applyBiquadFilterInto(samples, output, coeffs) {
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
   const { b0, b1, b2, a1, a2 } = coeffs;
 

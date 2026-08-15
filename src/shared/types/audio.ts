@@ -1,4 +1,4 @@
-import type { IAudioMetadata } from "music-metadata-browser";
+import type { IAudioMetadata } from "music-metadata";
 
 export type TrackStatus = "idle" | "queued" | "processing" | "done" | "error";
 
@@ -21,5 +21,4 @@ export interface TrackItem {
   progressPercent?: number;
   progressStatus?: string;
   errorMessage?: string;
-  masteredBuffer?: AudioBuffer;
 }

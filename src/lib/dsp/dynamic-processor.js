@@ -442,16 +442,9 @@ export class HybridDynamicProcessor {
    * @private
    */
   _processChannel(input, output, sampleRate, onProgress) {
-    const numFrames = Math.floor((input.length - this.fftSize) / this.hopSize);
     const magnitudes = new Float32Array(this.numBins);
 
-    for (let frame = 0; frame < numFrames; frame++) {
-      const pos = frame * this.hopSize;
-      const block = input.subarray(pos, pos + this.fftSize);
-
-      // Forward FFT
-      const spectrum = this.processor.forward(block);
-
+    const processedOutput = this.processor.processChannel(input, (spectrum) => {
       // Extract magnitudes
       for (let bin = 0; bin < this.numBins; bin++) {
         const re = spectrum[bin * 2];
@@ -476,27 +469,9 @@ export class HybridDynamicProcessor {
         }
       }
 
-      // Inverse FFT
-      const processed = this.processor.inverse(spectrum);
+    }, onProgress);
 
-      // Overlap-add
-      for (let i = 0; i < this.fftSize; i++) {
-        if (pos + i < output.length) {
-          output[pos + i] += processed[i];
-        }
-      }
-
-      // Progress
-      if (onProgress && frame % 100 === 0) {
-        onProgress(frame / numFrames);
-      }
-    }
-
-    // Normalize by overlap factor
-    const overlapFactor = this.fftSize / this.hopSize;
-    for (let i = 0; i < output.length; i++) {
-      output[i] /= overlapFactor;
-    }
+    output.set(processedOutput);
   }
 
   /**

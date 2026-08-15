@@ -14,6 +14,7 @@ export {
 // Utilities
 export {
   applyBiquadFilter,
+  applyBiquadFilterInto,
   calcHighShelfCoeffs,
   calcHighPassCoeffs,
   dbToLinear,

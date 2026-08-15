@@ -51,7 +51,7 @@ interface MasteringPanelProps {
 }
 
 export function MasteringPanel({ locale }: MasteringPanelProps) {
-  const { masteringSettings, updateMasteringSettings, selectedPresetId, setMasteringPreset } = useQueue();
+  const { masteringSettings, updateMasteringSettings, selectedPresetId, setMasteringPreset, isProcessing } = useQueue();
   const tips = getUiTips(locale);
   const [showTaktPromo] = useState(() => Math.random() < 0.5);
   const isExtensionRuntime = window.location.protocol === "chrome-extension:";
@@ -110,11 +110,13 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
             options={MASTERING_PRESET_OPTIONS}
             onChange={(next) => setMasteringPreset(next as MasteringPresetId)}
             tooltips={tips.presets}
+            disabled={isProcessing}
           />
         </div>
       </div>
 
-      <ScrollArea className="mastering-scroll">
+      <fieldset className="mastering-fieldset" disabled={isProcessing} aria-label="Mastering settings">
+        <ScrollArea className="mastering-scroll">
         <section className="control-group">
           <h3>Loudness and Safety</h3>
           <RangeRow
@@ -274,7 +276,8 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
             />
           </div>
         </section>
-      </ScrollArea>
+        </ScrollArea>
+      </fieldset>
       <footer className="app-credit">
         <div className="promo-links">{promoContent}</div>
         <div className="author-credit">
@@ -371,10 +374,17 @@ function RangeRow({
           step={step}
           defaultValue={value}
           style={{ "--progress": progress as any } as any}
-          onMouseDown={() => setIsDragging(true)}
-          onTouchStart={() => setIsDragging(true)}
-          onMouseUp={() => setIsDragging(false)}
-          onTouchEnd={() => setIsDragging(false)}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setIsDragging(true);
+          }}
+          onPointerUp={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            setIsDragging(false);
+          }}
+          onLostPointerCapture={() => setIsDragging(false)}
           onChange={(event) => {
             const nextValue = Number(event.currentTarget.value);
             if (isDragging) {

@@ -39,8 +39,6 @@ export function normalizeToLUFS(audioBuffer, targetLUFS = AUDIO_DEFAULTS.TARGET_
   const currentLUFS = measureLUFS(audioBuffer, targetLUFS);
   const currentPeakDB = findTruePeak(audioBuffer);
 
-  console.log('[LUFS] Current:', currentLUFS.toFixed(2), 'LUFS, Peak:', currentPeakDB.toFixed(2), 'dBTP');
-
   if (!isFinite(currentLUFS)) {
     console.warn('[LUFS] Could not measure loudness, skipping normalization');
     return audioBuffer;
@@ -53,8 +51,6 @@ export function normalizeToLUFS(audioBuffer, targetLUFS = AUDIO_DEFAULTS.TARGET_
   // Calculate what the peak will be after applying gain
   const projectedPeakDB = currentPeakDB + lufsGainDB;
   const ceilingLinear = Math.pow(10, ceilingDB / 20);
-
-  console.log('[LUFS] Applying gain:', lufsGainDB.toFixed(2), 'dB');
 
   // Create buffer with gain applied
   const gainedBuffer = new AudioBuffer({
@@ -73,21 +69,12 @@ export function normalizeToLUFS(audioBuffer, targetLUFS = AUDIO_DEFAULTS.TARGET_
 
   // Skip limiter if requested
   if (options.skipLimiter) {
-    console.log('[LUFS] Limiter skipped by options');
     return gainedBuffer;
   }
 
   // If peaks will exceed ceiling, apply lookahead limiter
   if (projectedPeakDB > ceilingDB) {
-    console.log('[LUFS] Projected peak:', projectedPeakDB.toFixed(2), 'dBTP exceeds ceiling, applying limiter');
-    const limitedBuffer = applyLookaheadLimiter(gainedBuffer, ceilingLinear, 3, 100);
-
-    // Verify final levels
-    const finalPeakDB = findTruePeak(limitedBuffer);
-    const finalLUFS = measureLUFS(limitedBuffer);
-    console.log('[LUFS] After limiting - Peak:', finalPeakDB.toFixed(2), 'dBTP, LUFS:', finalLUFS.toFixed(2));
-
-    return limitedBuffer;
+    return applyLookaheadLimiter(gainedBuffer, ceilingLinear, 3, 100);
   }
 
   return gainedBuffer;
@@ -130,8 +117,6 @@ export function applyGain(audioBuffer, gainDB) {
 export function normalizeToPeak(audioBuffer, targetPeakDB = -1) {
   const currentPeakDB = findTruePeak(audioBuffer);
   const gainDB = targetPeakDB - currentPeakDB;
-
-  console.log('[Peak] Current peak:', currentPeakDB.toFixed(2), 'dB, applying gain:', gainDB.toFixed(2), 'dB');
 
   return applyGain(audioBuffer, gainDB);
 }

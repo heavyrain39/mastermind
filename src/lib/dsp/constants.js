@@ -17,7 +17,7 @@ export const LUFS_CONSTANTS = {
   BLOCK_SIZE_SEC: 0.4,           // 400ms measurement blocks
   BLOCK_OVERLAP: 0.75,           // 75% overlap (100ms hop)
   ABSOLUTE_GATE_LUFS: -70,       // Absolute threshold in LUFS
-  ABSOLUTE_GATE_LINEAR: 1e-7,    // Math.pow(10, -70/10) = 1e-7
+  ABSOLUTE_GATE_LINEAR: Math.pow(10, (-70 + 0.691) / 10),
   RELATIVE_GATE_OFFSET: 0.1,     // -10 dB below ungated mean (10^(-10/10) = 0.1)
   LOUDNESS_OFFSET: -0.691        // Reference offset for LUFS calculation
 };

@@ -4,7 +4,7 @@
  */
 
 import { K_WEIGHTING, LUFS_CONSTANTS } from './constants.js';
-import { applyBiquadFilter, calcHighShelfCoeffs, calcHighPassCoeffs } from './utils.js';
+import { applyBiquadFilter, applyBiquadFilterInto, calcHighShelfCoeffs, calcHighPassCoeffs } from './utils.js';
 
 /**
  * Measure integrated loudness (LUFS) of an AudioBuffer
@@ -25,11 +25,6 @@ export function measureLUFS(audioBuffer, fallbackLufs = -14) {
     return fallbackLufs;
   }
 
-  const channels = [];
-  for (let ch = 0; ch < numChannels; ch++) {
-    channels.push(audioBuffer.getChannelData(ch));
-  }
-
   // Apply K-weighting filters (ITU-R BS.1770-4)
   const highShelfCoeffs = calcHighShelfCoeffs(
     sampleRate,
@@ -43,27 +38,30 @@ export function measureLUFS(audioBuffer, fallbackLufs = -14) {
     K_WEIGHTING.HIGH_PASS_Q
   );
 
-  const filteredChannels = channels.map(ch => {
-    let filtered = applyBiquadFilter(ch, highShelfCoeffs);
-    filtered = applyBiquadFilter(filtered, highPassCoeffs);
-    return filtered;
-  });
-
   // Calculate mean square per block with overlap (ITU-R BS.1770-4)
   const blockSize = Math.floor(sampleRate * LUFS_CONSTANTS.BLOCK_SIZE_SEC);
   const hopSize = Math.floor(sampleRate * LUFS_CONSTANTS.BLOCK_SIZE_SEC * (1 - LUFS_CONSTANTS.BLOCK_OVERLAP));
-  const blocks = [];
+  const blockCount = Math.max(0, Math.floor((length - blockSize) / hopSize) + 1);
+  const blockSums = new Float64Array(blockCount);
+  const filtered = new Float32Array(length);
 
-  for (let start = 0; start + blockSize <= length; start += hopSize) {
-    let sumSquares = 0;
-    for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = filteredChannels[ch];
+  for (let ch = 0; ch < numChannels; ch++) {
+    applyBiquadFilterInto(audioBuffer.getChannelData(ch), filtered, highShelfCoeffs);
+    applyBiquadFilterInto(filtered, filtered, highPassCoeffs);
+
+    let blockIndex = 0;
+    for (let start = 0; start + blockSize <= length; start += hopSize) {
+      let sumSquares = 0;
       for (let i = start; i < start + blockSize; i++) {
-        sumSquares += channelData[i] * channelData[i];
+        sumSquares += filtered[i] * filtered[i];
       }
+      blockSums[blockIndex++] += sumSquares;
     }
-    blocks.push(sumSquares / (blockSize * numChannels));
   }
+
+  // BS.1770 sums channel energies; averaging by channel count makes stereo
+  // material read about 3.01 LU too quiet.
+  const blocks = Array.from(blockSums, (sum) => sum / blockSize);
 
   if (blocks.length === 0) return -Infinity;
 
@@ -164,7 +162,7 @@ export function measureMomentaryLUFS(audioBuffer, position = 0) {
     }
   }
 
-  const meanSquare = sumSquares / ((endSample - startSample) * numChannels);
+  const meanSquare = sumSquares / (endSample - startSample);
   if (meanSquare <= 0) return -Infinity;
 
   return LUFS_CONSTANTS.LOUDNESS_OFFSET + 10 * Math.log10(meanSquare);

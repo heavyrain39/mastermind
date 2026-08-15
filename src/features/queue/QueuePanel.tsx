@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { FiTrash2, FiDownload } from "react-icons/fi";
+import { FiTrash2, FiDownload, FiX } from "react-icons/fi";
 import { useQueue } from "./QueueProvider";
 import { ScrollArea } from "../../shared/ui/ScrollArea";
 import type { UiLocale } from "../../shared/i18n/useUiLocale";
@@ -27,7 +27,9 @@ export function QueuePanel({ locale }: QueuePanelProps) {
     cancelProcessing,
     downloadTrack,
     downloadingTrackIds,
-    downloadProgress
+    downloadProgress,
+    notice,
+    clearNotice
   } = useQueue();
 
   const selectedCount = useMemo(
@@ -150,6 +152,15 @@ export function QueuePanel({ locale }: QueuePanelProps) {
             </div>
           </div>
         )}
+
+        {notice ? (
+          <div className="queue-notice" role="status">
+            <span>{notice}</span>
+            <button type="button" className="icon-btn" onClick={clearNotice} aria-label="Dismiss notice">
+              <FiX aria-hidden />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="queue-list-head">
@@ -258,4 +269,3 @@ export function QueuePanel({ locale }: QueuePanelProps) {
     </section>
   );
 }
-

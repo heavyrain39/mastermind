@@ -6,7 +6,7 @@
  * allowing louder masters without heavy limiter pumping.
  */
 
-import { dbToLinear, linearToDb, interpolateCatmullRom } from './utils.js';
+import { dbToLinear, interpolateCatmullRom } from './utils.js';
 
 /**
  * Soft clipper defaults
@@ -89,10 +89,6 @@ export function applySoftClip(buffer, options = {}, onProgress = null) {
     sampleRate: buffer.sampleRate
   });
 
-  // Track clipping statistics
-  let peakReduction = 0;
-  let samplesClipped = 0;
-
   for (let ch = 0; ch < numChannels; ch++) {
     const input = buffer.getChannelData(ch);
     const output = outputBuffer.getChannelData(ch);
@@ -104,21 +100,12 @@ export function applySoftClip(buffer, options = {}, onProgress = null) {
       // Apply wet/dry mix
       output[i] = mix < 1 ? sample * (1 - mix) + clipped * mix : clipped;
 
-      // Track stats
-      if (Math.abs(clipped) < Math.abs(sample)) {
-        samplesClipped++;
-        peakReduction = Math.max(peakReduction, Math.abs(sample) - Math.abs(clipped));
-      }
     }
 
     if (onProgress) {
       onProgress((ch + 1) / numChannels);
     }
   }
-
-  const clippedPercent = (samplesClipped / (length * numChannels) * 100).toFixed(2);
-  const reductionDb = peakReduction > 0 ? linearToDb(1 + peakReduction).toFixed(1) : '0.0';
-  console.log(`[Soft Clipper] ${clippedPercent}% samples clipped, max reduction: ${reductionDb} dB`);
 
   return outputBuffer;
 }

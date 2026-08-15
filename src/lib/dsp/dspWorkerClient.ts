@@ -75,11 +75,16 @@ interface WorkerInstance {
   pendingRequests: Map<number, PendingRequest>;
 }
 
+type WorkerWaiter = {
+  resolve: (instance: WorkerInstance) => void;
+  reject: (reason?: unknown) => void;
+};
+
 export class DSPWorkerClient {
   private workerInstances: WorkerInstance[] = [];
   private maxWorkers = Math.min(4, navigator.hardwareConcurrency || 4);
   private nextRequestId = 1;
-  private taskQueue: (() => void)[] = [];
+  private taskQueue: WorkerWaiter[] = [];
 
   async initWorker(): Promise<WorkerInstance> {
     const worker = new Worker(new URL("./worker.js", import.meta.url), {
@@ -99,7 +104,9 @@ export class DSPWorkerClient {
         pending.reject(error);
       }
       instance.pendingRequests.clear();
-      // 워커 에러 시 해당 인스턴스 제거 및 필요 시 재성성 로직은 복잡하므로 간단히 유지
+      instance.worker.terminate();
+      this.workerInstances = this.workerInstances.filter((candidate) => candidate !== instance);
+      this.replaceFailedWorkers();
     };
 
     this.workerInstances.push(instance);
@@ -113,6 +120,10 @@ export class DSPWorkerClient {
         pending.reject(new Error("DSP worker terminated"));
       }
       instance.pendingRequests.clear();
+    }
+    const terminationError = new Error("DSP worker terminated");
+    for (const waiter of this.taskQueue) {
+      waiter.reject(terminationError);
     }
     this.workerInstances = [];
     this.taskQueue = [];
@@ -194,7 +205,6 @@ export class DSPWorkerClient {
     }
 
     instance.pendingRequests.delete(payload.id);
-    instance.busy = false; // 작업 완료 시 busy 해제
 
     if (payload.success) {
       request.resolve(payload.result);
@@ -202,38 +212,47 @@ export class DSPWorkerClient {
       request.reject(new Error(payload.error || "DSP worker request failed"));
     }
 
-    // 큐에 대기 중인 작업이 있으면 실행
-    this.processQueue();
+    this.releaseInstance(instance);
   }
 
   private async getAvailableInstance(): Promise<WorkerInstance> {
     // 1. 노는 워커 찾기
     let instance = this.workerInstances.find(i => !i.busy);
-    if (instance) return instance;
+    if (instance) {
+      instance.busy = true;
+      return instance;
+    }
 
     // 2. 최대 개수 미만이면 새로 생성
     if (this.workerInstances.length < this.maxWorkers) {
-      return await this.initWorker();
+      instance = await this.initWorker();
+      instance.busy = true;
+      return instance;
     }
 
     // 3. 꽉 찼으면 빌 때까지 대기
-    return new Promise<WorkerInstance>((resolve) => {
-      this.taskQueue.push(() => {
-        const freeInstance = this.workerInstances.find(i => !i.busy);
-        if (freeInstance) {
-          resolve(freeInstance);
-        }
-      });
+    return new Promise<WorkerInstance>((resolve, reject) => {
+      this.taskQueue.push({ resolve, reject });
     });
   }
 
-  private processQueue() {
-    if (this.taskQueue.length > 0) {
-      const freeInstance = this.workerInstances.find(i => !i.busy);
-      if (freeInstance) {
-        const nextTask = this.taskQueue.shift();
-        if (nextTask) nextTask();
-      }
+  private releaseInstance(instance: WorkerInstance) {
+    const waiter = this.taskQueue.shift();
+    if (waiter) {
+      instance.busy = true;
+      waiter.resolve(instance);
+    } else {
+      instance.busy = false;
+    }
+  }
+
+  private replaceFailedWorkers() {
+    while (this.taskQueue.length > 0 && this.workerInstances.length < this.maxWorkers) {
+      const waiter = this.taskQueue.shift()!;
+      void this.initWorker().then((instance) => {
+        instance.busy = true;
+        waiter.resolve(instance);
+      }, waiter.reject);
     }
   }
 
@@ -244,7 +263,6 @@ export class DSPWorkerClient {
     transferables: ArrayBuffer[] = []
   ): Promise<T> {
     const instance = await this.getAvailableInstance();
-    instance.busy = true;
 
     return new Promise<T>((resolve, reject) => {
       const id = this.nextRequestId++;
@@ -254,9 +272,8 @@ export class DSPWorkerClient {
         instance.worker.postMessage({ type, id, data }, transferables);
       } catch (error) {
         instance.pendingRequests.delete(id);
-        instance.busy = false;
+        this.releaseInstance(instance);
         reject(error);
-        this.processQueue();
       }
     });
   }

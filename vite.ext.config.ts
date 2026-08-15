@@ -9,10 +9,22 @@ export default defineConfig({
         react(),
         {
             name: "copy-manifest",
+            transformIndexHtml(html) {
+                return html.replace(/\s*<script id="web-structured-data"[\s\S]*?<\/script>/, "");
+            },
             closeBundle() {
-                fs.copyFileSync(
+                const manifest = JSON.parse(fs.readFileSync(
                     path.resolve(__dirname, "src/extension/manifest.json"),
-                    path.resolve(__dirname, "dist-ext/manifest.json")
+                    "utf8"
+                ));
+                const packageJson = JSON.parse(fs.readFileSync(
+                    path.resolve(__dirname, "package.json"),
+                    "utf8"
+                ));
+                manifest.version = packageJson.version;
+                fs.writeFileSync(
+                    path.resolve(__dirname, "dist-ext/manifest.json"),
+                    `${JSON.stringify(manifest, null, 2)}\n`
                 );
             }
         }

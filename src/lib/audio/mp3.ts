@@ -19,9 +19,14 @@ interface WorkerInstance {
     pendingRequests: Map<number, PendingMp3Request>;
 }
 
+type WorkerWaiter = {
+    resolve: (instance: WorkerInstance) => void;
+    reject: (reason?: unknown) => void;
+};
+
 const workerInstances: WorkerInstance[] = [];
 const maxWorkers = Math.min(4, navigator.hardwareConcurrency || 4);
-const taskQueue: (() => void)[] = [];
+const taskQueue: WorkerWaiter[] = [];
 let nextRequestId = 1;
 
 function initWorker(): WorkerInstance {
@@ -54,7 +59,6 @@ function initWorker(): WorkerInstance {
         }
 
         instance.pendingRequests.delete(payload.id);
-        instance.busy = false;
 
         if (payload.success && payload.result) {
             request.resolve(payload.result.mp3Blob);
@@ -62,7 +66,7 @@ function initWorker(): WorkerInstance {
             request.reject(new Error(payload.error || "MP3 encoding failed"));
         }
 
-        processQueue();
+        releaseInstance(instance);
     };
 
     worker.onerror = (event) => {
@@ -71,6 +75,10 @@ function initWorker(): WorkerInstance {
             req.reject(error);
         }
         instance.pendingRequests.clear();
+        instance.worker.terminate();
+        const failedIndex = workerInstances.indexOf(instance);
+        if (failedIndex >= 0) workerInstances.splice(failedIndex, 1);
+        replaceFailedWorkers();
     };
 
     workerInstances.push(instance);
@@ -79,26 +87,41 @@ function initWorker(): WorkerInstance {
 
 async function getAvailableInstance(): Promise<WorkerInstance> {
     const freeInstance = workerInstances.find(i => !i.busy);
-    if (freeInstance) return freeInstance;
-
-    if (workerInstances.length < maxWorkers) {
-        return initWorker();
+    if (freeInstance) {
+        freeInstance.busy = true;
+        return freeInstance;
     }
 
-    return new Promise<WorkerInstance>((resolve) => {
-        taskQueue.push(() => {
-            const idle = workerInstances.find(i => !i.busy);
-            if (idle) resolve(idle);
-        });
+    if (workerInstances.length < maxWorkers) {
+        const instance = initWorker();
+        instance.busy = true;
+        return instance;
+    }
+
+    return new Promise<WorkerInstance>((resolve, reject) => {
+        taskQueue.push({ resolve, reject });
     });
 }
 
-function processQueue() {
-    if (taskQueue.length > 0) {
-        const idle = workerInstances.find(i => !i.busy);
-        if (idle) {
-            const next = taskQueue.shift();
-            if (next) next();
+function releaseInstance(instance: WorkerInstance) {
+    const waiter = taskQueue.shift();
+    if (waiter) {
+        instance.busy = true;
+        waiter.resolve(instance);
+    } else {
+        instance.busy = false;
+    }
+}
+
+function replaceFailedWorkers() {
+    while (taskQueue.length > 0 && workerInstances.length < maxWorkers) {
+        const waiter = taskQueue.shift()!;
+        try {
+            const instance = initWorker();
+            instance.busy = true;
+            waiter.resolve(instance);
+        } catch (error) {
+            waiter.reject(error);
         }
     }
 }
@@ -118,7 +141,6 @@ export async function encodeMp3(
     metadata?: any
 ): Promise<Blob> {
     const instance = await getAvailableInstance();
-    instance.busy = true;
 
     const numberOfChannels = audioBuffer.numberOfChannels;
     const channels: Float32Array[] = [];
@@ -155,9 +177,8 @@ export async function encodeMp3(
             );
         } catch (err) {
             instance.pendingRequests.delete(id);
-            instance.busy = false;
+            releaseInstance(instance);
             reject(err);
-            processQueue();
         }
     });
 }

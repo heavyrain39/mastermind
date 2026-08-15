@@ -23,48 +23,27 @@ import { interpolateCatmullRom } from './utils.js';
  */
 export function applySoftKneeCurve(sample, ceiling, kneeDB = LIMITER_DEFAULTS.KNEE_DB) {
   const absSample = Math.abs(sample);
+  const safeCeiling = Math.max(0, ceiling);
+  if (safeCeiling === 0) return 0;
 
-  // Fast path: signal well below ceiling
-  if (absSample <= ceiling * 0.9) {
-    return sample;
-  }
-
-  // Calculate knee boundaries
-  const kneeRatio = Math.pow(10, kneeDB / 20);
-  const kneeStart = ceiling / kneeRatio;
+  const safeKneeDB = Math.max(0, kneeDB);
+  const kneeRatio = Math.pow(10, safeKneeDB / 20);
+  const kneeStart = safeCeiling / kneeRatio;
 
   // Region 1: Below knee start - pure linear passthrough
   if (absSample <= kneeStart) {
     return sample;
   }
 
-  // Region 2: In the knee (between kneeStart and ceiling)
-  // Smooth polynomial blend from linear to limited
-  if (absSample <= ceiling) {
-    // Normalized position in knee (0 = knee start, 1 = ceiling)
-    const t = (absSample - kneeStart) / (ceiling - kneeStart);
-
-    // Smoothstep function for gradual transition: 3t² - 2t³
-    const blend = t * t * (3 - 2 * t);
-
-    // Blend between linear output and ceiling
-    const output = absSample + (ceiling - absSample) * blend * 0.5;
-
-    return Math.sign(sample) * output;
+  const kneeRange = safeCeiling - kneeStart;
+  if (kneeRange <= Number.EPSILON) {
+    return Math.sign(sample) * Math.min(absSample, safeCeiling);
   }
 
-  // Region 3: Above ceiling - soft limiting that never exceeds ceiling
-  // Use tanh compression curve that asymptotically approaches ceiling
-  const excess = absSample - ceiling;
-
-  // Compress excess using tanh - output approaches ceiling but never exceeds it
-  // The formula: ceiling * (1 - k * tanh(excess / ceiling))
-  // As excess → ∞, output → ceiling (never exceeds)
-  const normalized = excess / ceiling;
-  const compression = 1 - Math.tanh(normalized * 2) * 0.1; // Small headroom reduction for extreme peaks
-
-  // Ensure output never exceeds ceiling
-  const output = Math.min(ceiling, absSample * compression);
+  // Continuous, monotonic and non-boosting. The curve enters with unity
+  // slope at kneeStart and approaches the ceiling asymptotically.
+  const normalized = (absSample - kneeStart) / kneeRange;
+  const output = kneeStart + kneeRange * Math.tanh(normalized);
 
   return Math.sign(sample) * output;
 }
@@ -329,33 +308,6 @@ export function applyLookaheadLimiter(
     for (let i = 0; i < length; i++) {
       output[i] = softKneeOutput[i];
     }
-  }
-
-  // =========================================================================
-  // Logging
-  // =========================================================================
-  let minGain = 1.0;
-  let softKneeActive = false;
-  for (let i = 0; i < length; i++) {
-    if (gainEnvelope[i] < minGain) minGain = gainEnvelope[i];
-  }
-
-  for (let ch = 0; ch < numChannels; ch++) {
-    const output = outputBuffer.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      if (Math.abs(output[i]) > ceilingLinear * 0.99) {
-        softKneeActive = true;
-        break;
-      }
-    }
-    if (softKneeActive) break;
-  }
-
-  if (minGain < 1.0) {
-    console.log('[Limiter] Stage 1 - Max gain reduction:', (20 * Math.log10(minGain)).toFixed(2), 'dB');
-  }
-  if (softKneeActive) {
-    console.log('[Limiter] Stage 2 - Soft-knee saturation active');
   }
 
   return outputBuffer;

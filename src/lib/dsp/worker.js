@@ -10,16 +10,14 @@
 
 // Import DSP modules
 import {
-  K_WEIGHTING,
-  LUFS_CONSTANTS,
   LIMITER_DEFAULTS,
   applyBiquadFilter,
   calcHighShelfCoeffs,
   calcHighPassCoeffs,
-  dbToLinear,
   // Full chain DSP functions
   measureLUFS,
   findTruePeak,
+  calculateTruePeakSample,
   applyGain,
   normalizeToLUFS,
   applyMultibandTransient,
@@ -28,7 +26,7 @@ import {
   applyDynamicLeveling,
   HybridDynamicProcessor,
   applyFinalFilters,
-  applyLookaheadLimiter
+  applySoftKneeOversampled
 } from './index.js';
 
 /**
@@ -256,209 +254,27 @@ function applyAutoLevelProcessing(buffer, amount, truePeakCeiling) {
  * Worker-compatible version that doesn't require AudioBuffer
  */
 function measureLUFSFromChannels(channels, sampleRate, fallbackLufs = -14) {
-  const numChannels = channels.length;
-  const length = channels[0].length;
-  const duration = length / sampleRate;
-
-  // Minimum block size required for LUFS measurement
-  if (duration < LUFS_CONSTANTS.BLOCK_SIZE_SEC) {
-    console.warn(`[Worker LUFS] Audio too short for reliable measurement`);
-    return fallbackLufs;
-  }
-
-  // Apply K-weighting filters
-  const highShelfCoeffs = calcHighShelfCoeffs(
-    sampleRate,
-    K_WEIGHTING.HIGH_SHELF_FREQ,
-    K_WEIGHTING.HIGH_SHELF_GAIN,
-    K_WEIGHTING.HIGH_SHELF_Q
-  );
-  const highPassCoeffs = calcHighPassCoeffs(
-    sampleRate,
-    K_WEIGHTING.HIGH_PASS_FREQ,
-    K_WEIGHTING.HIGH_PASS_Q
-  );
-
-  const filteredChannels = channels.map(ch => {
-    let filtered = applyBiquadFilter(ch, highShelfCoeffs);
-    filtered = applyBiquadFilter(filtered, highPassCoeffs);
-    return filtered;
-  });
-
-  // Calculate mean square per block with overlap
-  const blockSize = Math.floor(sampleRate * LUFS_CONSTANTS.BLOCK_SIZE_SEC);
-  const hopSize = Math.floor(sampleRate * LUFS_CONSTANTS.BLOCK_SIZE_SEC * (1 - LUFS_CONSTANTS.BLOCK_OVERLAP));
-  const blocks = [];
-
-  for (let start = 0; start + blockSize <= length; start += hopSize) {
-    let sumSquares = 0;
-    for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = filteredChannels[ch];
-      for (let i = start; i < start + blockSize; i++) {
-        sumSquares += channelData[i] * channelData[i];
-      }
-    }
-    blocks.push(sumSquares / (blockSize * numChannels));
-  }
-
-  if (blocks.length === 0) return -Infinity;
-
-  // Absolute threshold gating
-  let gatedBlocks = blocks.filter(ms => ms > LUFS_CONSTANTS.ABSOLUTE_GATE_LINEAR);
-  if (gatedBlocks.length === 0) return -Infinity;
-
-  // Relative threshold gating
-  const ungatedMean = gatedBlocks.reduce((a, b) => a + b, 0) / gatedBlocks.length;
-  gatedBlocks = gatedBlocks.filter(ms => ms > ungatedMean * LUFS_CONSTANTS.RELATIVE_GATE_OFFSET);
-  if (gatedBlocks.length === 0) return -Infinity;
-
-  // Calculate integrated loudness
-  const gatedMean = gatedBlocks.reduce((a, b) => a + b, 0) / gatedBlocks.length;
-  return LUFS_CONSTANTS.LOUDNESS_OFFSET + 10 * Math.log10(gatedMean);
-}
-
-/**
- * Calculate true peak using 4x oversampled Catmull-Rom interpolation
- */
-function calculateTruePeakSample(prevSamples) {
-  const y0 = prevSamples[0];
-  const y1 = prevSamples[1];
-  const y2 = prevSamples[2];
-  const y3 = prevSamples[3];
-
-  let peak = Math.abs(y2);
-
-  const a0 = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-  const a1 = y0 - 2.5 * y1 + 2 * y2 - 0.5 * y3;
-  const a2 = -0.5 * y0 + 0.5 * y2;
-  const a3 = y1;
-
-  for (let i = 1; i <= 3; i++) {
-    const t = i * 0.25;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    const interpolated = a0 * t3 + a1 * t2 + a2 * t + a3;
-    peak = Math.max(peak, Math.abs(interpolated));
-  }
-
-  return peak;
+  return measureLUFS(createAudioBufferView(channels, sampleRate), fallbackLufs);
 }
 
 /**
  * Find true peak from channel data
  */
 function findTruePeakFromChannels(channels) {
-  let maxPeak = 0;
-
-  for (let ch = 0; ch < channels.length; ch++) {
-    const channelData = channels[ch];
-    const prevSamples = [0, 0, 0, 0];
-
-    for (let i = 0; i < channelData.length; i++) {
-      prevSamples[0] = prevSamples[1];
-      prevSamples[1] = prevSamples[2];
-      prevSamples[2] = prevSamples[3];
-      prevSamples[3] = channelData[i];
-
-      if (i >= 3) {
-        const truePeak = calculateTruePeakSample(prevSamples);
-        if (truePeak > maxPeak) {
-          maxPeak = truePeak;
-        }
-      }
-    }
-  }
-
-  return maxPeak > 0 ? 20 * Math.log10(maxPeak) : -Infinity;
+  return findTruePeak(createAudioBufferView(channels, 1));
 }
 
-/**
- * Apply soft-knee limiting curve
- */
-function applySoftKneeCurve(sample, ceiling, kneeDB = 3) {
-  const absSample = Math.abs(sample);
-
-  if (absSample <= ceiling * 0.9) {
-    return sample;
-  }
-
-  const kneeRatio = Math.pow(10, kneeDB / 20);
-  const kneeStart = ceiling / kneeRatio;
-
-  if (absSample <= kneeStart) {
-    return sample;
-  }
-
-  if (absSample <= ceiling) {
-    const t = (absSample - kneeStart) / (ceiling - kneeStart);
-    const blend = t * t * (3 - 2 * t);
-    const output = absSample + (ceiling - absSample) * blend * 0.5;
-    return Math.sign(sample) * output;
-  }
-
-  // Above ceiling - soft limiting that never exceeds ceiling
-  const excess = absSample - ceiling;
-
-  // Compress excess using tanh - output approaches ceiling but never exceeds it
-  const normalized = excess / ceiling;
-  const compression = 1 - Math.tanh(normalized * 2) * 0.1;
-
-  // Ensure output never exceeds ceiling
-  const output = Math.min(ceiling, absSample * compression);
-
-  return Math.sign(sample) * output;
-}
-
-/**
- * Apply soft-knee with oversampling
- */
-function applySoftKneeOversampled(input, ceiling, kneeDB = 3) {
-  const length = input.length;
-  const output = new Float32Array(length);
-  const prevSamples = [0, 0, 0, 0];
-
-  for (let i = 0; i < length; i++) {
-    prevSamples[0] = prevSamples[1];
-    prevSamples[1] = prevSamples[2];
-    prevSamples[2] = prevSamples[3];
-    prevSamples[3] = input[i];
-
-    if (i < 3) {
-      output[i] = applySoftKneeCurve(input[i], ceiling, kneeDB);
-      continue;
+function createAudioBufferView(channels, sampleRate) {
+  const length = channels[0]?.length ?? 0;
+  return {
+    numberOfChannels: channels.length,
+    length,
+    sampleRate,
+    duration: sampleRate > 0 ? length / sampleRate : 0,
+    getChannelData(channel) {
+      return channels[channel];
     }
-
-    const y0 = prevSamples[0];
-    const y1 = prevSamples[1];
-    const y2 = prevSamples[2];
-    const y3 = prevSamples[3];
-
-    const a0 = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-    const a1 = y0 - 2.5 * y1 + 2 * y2 - 0.5 * y3;
-    const a2 = -0.5 * y0 + 0.5 * y2;
-    const a3 = y1;
-
-    let maxInterpolated = Math.abs(y2);
-
-    for (let j = 1; j <= 3; j++) {
-      const t = j * 0.25;
-      const t2 = t * t;
-      const t3 = t2 * t;
-      const interpolated = Math.abs(a0 * t3 + a1 * t2 + a2 * t + a3);
-      if (interpolated > maxInterpolated) {
-        maxInterpolated = interpolated;
-      }
-    }
-
-    if (maxInterpolated > ceiling) {
-      const gainReduction = ceiling / maxInterpolated;
-      output[i] = applySoftKneeCurve(input[i] * gainReduction, ceiling, kneeDB);
-    } else {
-      output[i] = applySoftKneeCurve(input[i], ceiling, kneeDB);
-    }
-  }
-
-  return output;
+  };
 }
 
 /**
@@ -710,9 +526,6 @@ function normalizeChannelsToLUFS(channels, sampleRate, id, targetLUFS = -14, cei
   const currentLUFS = measureLUFSFromChannels(channels, sampleRate, targetLUFS);
   const currentPeakDB = findTruePeakFromChannels(channels);
 
-  console.log('[Worker LUFS] Current:', currentLUFS.toFixed(2), 'LUFS, Peak:', currentPeakDB.toFixed(2), 'dBTP');
-  console.log('[Worker LUFS] Target:', targetLUFS, 'LUFS, Ceiling:', ceilingDB, 'dBTP');
-
   if (!isFinite(currentLUFS)) {
     console.warn('[Worker LUFS] Could not measure loudness, returning original');
     return { channels, currentLUFS, finalLUFS: currentLUFS, peakDB: currentPeakDB };
@@ -724,8 +537,6 @@ function normalizeChannelsToLUFS(channels, sampleRate, id, targetLUFS = -14, cei
   const gainLinear = Math.pow(10, lufsGainDB / 20);
   const projectedPeakDB = currentPeakDB + lufsGainDB;
   const ceilingLinear = Math.pow(10, ceilingDB / 20);
-
-  console.log('[Worker LUFS] Applying gain:', lufsGainDB.toFixed(2), 'dB');
 
   // Apply gain
   const gainedChannels = channels.map(ch => {
@@ -739,8 +550,6 @@ function normalizeChannelsToLUFS(channels, sampleRate, id, targetLUFS = -14, cei
   // If peaks exceed ceiling, apply limiter
   if (projectedPeakDB > ceilingDB) {
     sendProgress(id, 0.25, 'Applying limiter...');
-    console.log('[Worker LUFS] Projected peak:', projectedPeakDB.toFixed(2), 'dBTP exceeds ceiling, applying limiter');
-
     const limitedChannels = applyLookaheadLimiterToChannels(
       gainedChannels,
       sampleRate,
@@ -752,8 +561,6 @@ function normalizeChannelsToLUFS(channels, sampleRate, id, targetLUFS = -14, cei
 
     const finalPeakDB = findTruePeakFromChannels(limitedChannels);
     const finalLUFS = measureLUFSFromChannels(limitedChannels, sampleRate);
-    console.log('[Worker LUFS] After limiting - Peak:', finalPeakDB.toFixed(2), 'dBTP, LUFS:', finalLUFS.toFixed(2));
-
     return {
       channels: limitedChannels,
       currentLUFS,
@@ -1780,9 +1587,6 @@ self.onmessage = async (e) => {
           buffer.copyToChannel(channels[ch], ch);
         }
 
-        // Track level through the chain
-        console.log(`[Worker Chain] Starting render (Mode: ${mode})`);
-
         const clarityAmount = normalizeAmount(settings.clarityAmount);
         const airAmount = normalizeAmount(settings.airAmount);
         const warmthAmount = normalizeAmount(settings.warmthAmount);
@@ -1840,7 +1644,6 @@ self.onmessage = async (e) => {
 
         // --- PREVIEW MODE END ---
         if (mode === 'preview') {
-          console.log('[Worker Chain] Preview render complete (Heavy FX only)');
           sendProgress(id, 1.0, 'Complete');
 
           // Extract and return
@@ -2015,5 +1818,3 @@ self.onmessage = async (e) => {
     self.postMessage({ id, success: false, error: error.message });
   }
 };
-
-console.log('[DSP Worker] Initialized');

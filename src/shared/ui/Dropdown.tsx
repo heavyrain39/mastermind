@@ -10,11 +10,12 @@ interface DropdownProps {
   options: DropdownOption[];
   onChange: (next: string) => void;
   ariaLabel: string;
+  disabled?: boolean;
   /** Optional map of option value → tooltip text. */
   tooltips?: Record<string, string>;
 }
 
-export function Dropdown({ value, options, onChange, ariaLabel, tooltips }: DropdownProps) {
+export function Dropdown({ value, options, onChange, ariaLabel, disabled = false, tooltips }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -69,6 +70,7 @@ export function Dropdown({ value, options, onChange, ariaLabel, tooltips }: Drop
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         data-tooltip={!open ? triggerTooltip : undefined}
         data-tooltip-position={!open && hasTooltips ? "left" : undefined}

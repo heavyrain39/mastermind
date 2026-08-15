@@ -230,14 +230,7 @@ export class DynamicLeveler {
    * @returns {AudioBuffer} Processed audio buffer
    */
   process(buffer, targetGain = 1.0, peakLimit = 1.0, onProgress = null) {
-    const { gainCurve, analysisData } = this.analyze(buffer, targetGain, peakLimit);
-
-    // Log analysis summary
-    const numTransients = analysisData.isTransient.reduce((a, b) => a + b, 0);
-    const numQuiet = analysisData.isQuiet.reduce((a, b) => a + b, 0);
-    const avgGainDB = linearToDb(gainCurve.reduce((a, b) => a + b, 0) / gainCurve.length);
-
-    console.log(`[DynamicLeveler] Transient windows: ${numTransients}, Quiet windows: ${numQuiet}, Avg gain: ${avgGainDB.toFixed(2)}dB`);
+    const { gainCurve } = this.analyze(buffer, targetGain, peakLimit);
 
     return this.apply(buffer, gainCurve, onProgress);
   }

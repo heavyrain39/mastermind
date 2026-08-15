@@ -1,8 +1,8 @@
-import type { IAudioMetadata } from "music-metadata-browser";
+import type { IAudioMetadata } from "music-metadata";
 import type { DitherMode } from "../../shared/types/mastering";
 import { generateID3v2Tag } from "./mp3-tagger";
 
-interface WavEncodeOptions {
+export interface WavEncodeOptions {
   bitDepth?: 16 | 24;
   ditherMode?: DitherMode;
   metadata?: IAudioMetadata;
@@ -24,13 +24,24 @@ export function encodeAudioBufferToWav(
   audioBuffer: AudioBuffer,
   options: WavEncodeOptions = {}
 ): Uint8Array {
-  const numberOfChannels = audioBuffer.numberOfChannels;
-  const sampleRate = audioBuffer.sampleRate;
+  const channels = Array.from(
+    { length: audioBuffer.numberOfChannels },
+    (_, channelIndex) => audioBuffer.getChannelData(channelIndex)
+  );
+  return encodePcmChannelsToWav(channels, audioBuffer.sampleRate, options);
+}
+
+export function encodePcmChannelsToWav(
+  channels: Float32Array[],
+  sampleRate: number,
+  options: WavEncodeOptions = {}
+): Uint8Array {
+  const numberOfChannels = channels.length;
   const bitDepth = options.bitDepth === 24 ? 24 : 16;
   const ditherMode = resolveDitherMode(options.ditherMode, bitDepth);
   const metadata = options.metadata;
   const bytesPerSample = bitDepth / 8;
-  const length = audioBuffer.length;
+  const length = channels[0]?.length ?? 0;
   const dataSize = length * numberOfChannels * bytesPerSample;
 
   // Metadata (RIFF LIST INFO + optional ID3 chunk)
@@ -43,7 +54,7 @@ export function encodeAudioBufferToWav(
     const album = cleanInfoText(info.album);
     const year = typeof info.year === "number" ? String(info.year) : undefined;
     const genre = cleanInfoText(info.genre?.[0]);
-    const comment = cleanInfoText(info.comment?.[0]);
+    const comment = cleanInfoText(info.comment?.[0]?.text);
 
     if (title) infoTags.push({ id: "INAM", encoded: textEncoder.encode(title) });
     if (artist) infoTags.push({ id: "IART", encoded: textEncoder.encode(artist) });
@@ -92,11 +103,6 @@ export function encodeAudioBufferToWav(
   writeString(view, offset, "data");
   view.setUint32(offset + 4, dataSize, true);
   offset += 8;
-
-  const channels: Float32Array[] = [];
-  for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex += 1) {
-    channels.push(audioBuffer.getChannelData(channelIndex));
-  }
 
   const noiseShapeError = ditherMode === "noise-shaped" ? new Float32Array(numberOfChannels) : null;
   const maxVal = bitDepth === 24 ? 8388607 : 32767;

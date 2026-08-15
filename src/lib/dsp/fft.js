@@ -68,6 +68,52 @@ export class FFTProcessor {
   }
 
   /**
+   * Process a complete channel with padded weighted overlap-add.
+   * Per-sample window normalization preserves level and track boundaries.
+   */
+  processChannel(input, processSpectrum, onProgress = null) {
+    const output = new Float32Array(input.length);
+    const windowWeights = new Float32Array(input.length);
+    const block = new Float32Array(this.size);
+    const firstPosition = -(this.size - this.hopSize);
+    const totalFrames = Math.max(1, Math.ceil((input.length - firstPosition) / this.hopSize));
+    let frame = 0;
+
+    for (let position = firstPosition; position < input.length; position += this.hopSize) {
+      block.fill(0);
+      const sourceStart = Math.max(0, position);
+      const sourceEnd = Math.min(input.length, position + this.size);
+      if (sourceEnd > sourceStart) {
+        block.set(input.subarray(sourceStart, sourceEnd), sourceStart - position);
+      }
+
+      const spectrum = this.forward(block);
+      processSpectrum(spectrum, frame, position);
+      const processed = this.inverse(spectrum);
+
+      for (let i = 0; i < this.size; i++) {
+        const outputIndex = position + i;
+        if (outputIndex < 0 || outputIndex >= output.length) continue;
+        output[outputIndex] += processed[i];
+        windowWeights[outputIndex] += this.window[i] * this.window[i];
+      }
+
+      frame += 1;
+      if (onProgress && (frame % 100 === 0 || frame === totalFrames)) {
+        onProgress(frame / totalFrames);
+      }
+    }
+
+    for (let i = 0; i < output.length; i++) {
+      if (windowWeights[i] > 1e-8) {
+        output[i] /= windowWeights[i];
+      }
+    }
+
+    return output;
+  }
+
+  /**
    * Get magnitude spectrum in dB
    * @param {Float32Array} spectrum - Complex spectrum
    * @returns {Float32Array} Magnitude in dB (length = fftSize/2)
@@ -158,7 +204,6 @@ export class FFTProcessor {
  */
 export function processWithFFT(input, fftSize, hopSize, processCallback, sampleRate) {
   const processor = new FFTProcessor(fftSize, hopSize);
-  const output = new Float32Array(input.length);
 
   // Pre-calculate bin frequencies
   const binFrequencies = new Float32Array(fftSize / 2);
@@ -166,35 +211,9 @@ export function processWithFFT(input, fftSize, hopSize, processCallback, sampleR
     binFrequencies[i] = processor.binToFrequency(i, sampleRate);
   }
 
-  // Process with overlap-add
-  for (let pos = 0; pos + fftSize <= input.length; pos += hopSize) {
-    // Extract block
-    const block = input.subarray(pos, pos + fftSize);
-
-    // Forward FFT
-    const spectrum = processor.forward(block);
-
-    // Apply processing callback
+  return processor.processChannel(input, (spectrum) => {
     processCallback(spectrum, binFrequencies);
-
-    // Inverse FFT
-    const processed = processor.inverse(spectrum);
-
-    // Overlap-add
-    for (let i = 0; i < fftSize; i++) {
-      if (pos + i < output.length) {
-        output[pos + i] += processed[i];
-      }
-    }
-  }
-
-  // Normalize by overlap factor
-  const overlapFactor = fftSize / hopSize;
-  for (let i = 0; i < output.length; i++) {
-    output[i] /= overlapFactor;
-  }
-
-  return output;
+  });
 }
 
 /**

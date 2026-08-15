@@ -25,6 +25,8 @@ interface ABPlayerPanelProps {
 type PlaybackMode = "A" | "B";
 
 const WAVE_BINS = 360;
+const wavePeakCache = new Map<string, number[]>();
+const MAX_WAVE_CACHE_ENTRIES = 100;
 
 export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const { tracks, activeTrack, activeTrackId, setActiveTrackId, downloadTrack, downloadDoneTracksZip, isDownloadingZip } = useQueue();
@@ -35,6 +37,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
   const [durationB, setDurationB] = useState(0);
   const [wavePeaksA, setWavePeaksA] = useState<number[] | null>(null);
   const [wavePeaksB, setWavePeaksB] = useState<number[] | null>(null);
+  const [loudnessMatched, setLoudnessMatched] = useState(true);
   const tips = getUiTips(locale);
   const audioOriginalRef = useRef<HTMLAudioElement>(null);
   const audioMasteredRef = useRef<HTMLAudioElement>(null);
@@ -115,11 +118,19 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
 
     const loadWave = async (src: string) => {
       if (!src) return null;
+      const cached = wavePeakCache.get(src);
+      if (cached) return cached;
       try {
         const response = await fetch(src);
         const sourceBytes = await response.arrayBuffer();
-        const decoded = await decodeContext.decodeAudioData(sourceBytes.slice(0));
-        return extractWavePeaks(decoded, WAVE_BINS);
+        const decoded = await decodeContext.decodeAudioData(sourceBytes);
+        const peaks = extractWavePeaks(decoded, WAVE_BINS);
+        if (wavePeakCache.size >= MAX_WAVE_CACHE_ENTRIES) {
+          const oldestKey = wavePeakCache.keys().next().value;
+          if (oldestKey) wavePeakCache.delete(oldestKey);
+        }
+        wavePeakCache.set(src, peaks);
+        return peaks;
       } catch {
         return null;
       }
@@ -143,6 +154,31 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
       }
     };
   }, []);
+
+  const getPlaybackGain = (mode: PlaybackMode) => {
+    if (!loudnessMatched) return 1;
+    const originalLufs = activeTrack?.originalLufs;
+    const masteredLufs = activeTrack?.masteredLufs;
+    if (!Number.isFinite(originalLufs) || !Number.isFinite(masteredLufs)) return 1;
+
+    const referenceLufs = Math.min(originalLufs!, masteredLufs!);
+    const sourceLufs = mode === "A" ? originalLufs! : masteredLufs!;
+    return Math.pow(10, (referenceLufs - sourceLufs) / 20);
+  };
+
+  useEffect(() => {
+    const entries: Array<[PlaybackMode, HTMLAudioElement | null, GainNode | null]> = [
+      ["A", audioOriginalRef.current, gainRefA.current],
+      ["B", audioMasteredRef.current, gainRefB.current]
+    ];
+    for (const [mode, audio, gain] of entries) {
+      if (!audio || audio.paused || !gain) continue;
+      const context = gain.context as AudioContext;
+      gain.gain.cancelScheduledValues(context.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, context.currentTime);
+      gain.gain.linearRampToValueAtTime(getPlaybackGain(mode), context.currentTime + 0.02);
+    }
+  }, [loudnessMatched, activeTrack?.originalLufs, activeTrack?.masteredLufs]);
 
   const togglePlay = async (mode: PlaybackMode) => {
     const target = mode === "A" ? audioOriginalRef.current : audioMasteredRef.current;
@@ -186,7 +222,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
         currentGain.gain.setValueAtTime(0, ctx.currentTime);
-        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.02);
+        currentGain.gain.linearRampToValueAtTime(getPlaybackGain(mode), ctx.currentTime + 0.02);
       }
       await target.play();
       setPlayingMode(mode);
@@ -265,7 +301,7 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         const ctx = currentGain.context as AudioContext;
         currentGain.gain.cancelScheduledValues(ctx.currentTime);
         currentGain.gain.setValueAtTime(0, ctx.currentTime);
-        currentGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.02);
+        currentGain.gain.linearRampToValueAtTime(getPlaybackGain(mode), ctx.currentTime + 0.02);
       }
       await target.play();
       setPlayingMode(mode);
@@ -289,7 +325,17 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
     <section className="panel player-panel">
       <div className="panel-head">
         <h2>A/B Monitor</h2>
-        <span className="meta-chip">Selected: {trackLabel}</span>
+        <div className="ab-head-tools">
+          <label className="ab-match-toggle">
+            <input
+              type="checkbox"
+              checked={loudnessMatched}
+              onChange={(event) => setLoudnessMatched(event.currentTarget.checked)}
+            />
+            <span>LUFS Match</span>
+          </label>
+          <span className="meta-chip">Selected: {trackLabel}</span>
+        </div>
       </div>
 
       <div className="wave-stack">

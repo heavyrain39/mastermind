@@ -16,6 +16,8 @@
   <meta property="og:url" content="https://mstr-mnd.vercel.app/">
   <meta property="og:site_name" content="MSTRMND">
   <meta property="og:image" content="https://mstr-mnd.vercel.app/images/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="ko_KR">
   <meta property="og:type" content="website">
@@ -26,9 +28,11 @@
   <meta name="twitter:description"
     content="Free web-based batch mastering solution for track producers. Process up to 50 tracks at once.">
   <meta name="twitter:image" content="https://mstr-mnd.vercel.app/images/og-image.jpg">
+  <meta name="theme-color" content="#f5f6f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)">
 
   <!-- Structured Data (JSON-LD) -->
-  <script type="application/ld+json">
+  <script id="web-structured-data" type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -45,9 +49,10 @@
   }
   </script>
 
-  <!-- lamejs 라이브러리 전역 로드 (Vite 번들링 과정의 충돌 및 Memory 한계를 피하기 위해 분리됨) -->
-  <script src="/lib/lame.all.js"></script>
-  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
 </head>
 
 <body>

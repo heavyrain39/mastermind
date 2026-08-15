@@ -113,9 +113,12 @@ export function VisualizerCard() {
         let frameId: number;
         const startTime = Date.now();
         let freqData = new Uint8Array(1024); // max possible size for analyser
+        let lastFrameTime = 0;
 
-        const render = () => {
+        const render = (frameTime = 0) => {
             frameId = requestAnimationFrame(render);
+            if (document.hidden || frameTime - lastFrameTime < 1000 / 30) return;
+            lastFrameTime = frameTime;
             const cvs = canvasRef.current;
             if (!cvs) return;
 

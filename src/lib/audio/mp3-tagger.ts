@@ -1,4 +1,4 @@
-import type { IAudioMetadata } from "music-metadata-browser";
+import type { IAudioMetadata } from "music-metadata";
 
 /**
  * MP3 ID3v2.3 Tagger Utility

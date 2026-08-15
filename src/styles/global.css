@@ -92,7 +92,7 @@ body {
   background-size: 80px 80px;
   background-attachment: fixed;
   opacity: 1;
-  animation: gridSlide 7.5s linear infinite;
+  animation: gridSlide 60s linear infinite;
 }
 
 @keyframes gridSlide {
@@ -102,6 +102,12 @@ body {
 
   to {
     background-position: -80px 0, -80px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
   }
 }
 
@@ -351,6 +357,23 @@ a {
   height: 100%;
   background: var(--accent);
   transition: width 200ms ease-out;
+}
+
+.queue-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.queue-notice .icon-btn {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
 }
 
 .primary-action-btn {
@@ -737,6 +760,20 @@ a {
   grid-template-rows: auto 1fr;
 }
 
+.ab-head-tools,
+.ab-match-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ab-match-toggle {
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .wave-stack {
   padding: 10px;
   display: grid;
@@ -833,6 +870,19 @@ a {
 
 .mastering-panel {
   grid-template-rows: auto 1fr auto;
+}
+
+.mastering-fieldset {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mastering-fieldset:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .mastering-head {
