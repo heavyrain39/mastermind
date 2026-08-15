@@ -18,6 +18,7 @@ export interface UiTips {
     removeTrack: string;
   };
   ab: {
+    lufsMatch: string;
     play: string;
     stop: string;
     modeA: string;
@@ -76,6 +77,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       removeTrack: "이 트랙을 대기열에서 삭제합니다."
     },
     ab: {
+      lufsMatch: "켜면 원본과 마스터의 재생 음량을 맞춰, 음색 차이만 비교할 수 있습니다.",
       play: "선택된 채널(A 또는 B)을 재생합니다.",
       stop: "재생을 멈추고 처음으로 돌아갑니다.",
       modeA: "채널 A (원본 트랙) 소리를 듣습니다.",
@@ -132,6 +134,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       removeTrack: "Remove this track from the queue."
     },
     ab: {
+      lufsMatch: "Turn on to match playback loudness and compare tone without volume bias.",
       play: "Play the currently selected channel (A or B).",
       stop: "Stop playback and return to the beginning.",
       modeA: "Listen to Channel A (Original Track).",
@@ -188,6 +191,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       removeTrack: "Remover esta faixa da fila."
     },
     ab: {
+      lufsMatch: "Ative para igualar o volume e comparar o timbre sem viés de volume.",
       play: "Reproduzir o canal atualmente selecionado (A ou B).",
       stop: "Parar a reprodução e voltar ao início.",
       modeA: "Ouvir o Canal A (Faixa Original).",
@@ -244,6 +248,7 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       removeTrack: "このトラックをキューから削除します。"
     },
     ab: {
+      lufsMatch: "オンにすると再生音量をそろえ、音量差に惑わされず音質を比較できます。",
       play: "選択したチャンネル（AまたはB）を再生します。",
       stop: "再生を停止して最初に戻ります。",
       modeA: "チャンネルA（オリジナル音源）を聴きます。",

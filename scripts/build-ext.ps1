@@ -44,7 +44,7 @@ if ($LASTEXITCODE -eq 0) {
     }
     # Pass the top-level entries explicitly so the archive contains
     # manifest.json at the ZIP root (and not under a ./ prefix).
-    tar.exe -a -cf $ZipPath -C "dist-ext" manifest.json index.html background.js assets
+    tar.exe -a -cf $ZipPath -C "dist-ext" manifest.json index.html background.js icon-16.png icon-48.png favicon.png assets
     if ($LASTEXITCODE -ne 0) {
         throw "Extension packaging failed."
     }

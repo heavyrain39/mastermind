@@ -327,8 +327,9 @@ export function ABPlayerPanel({ locale }: ABPlayerPanelProps) {
         <h2>A/B Monitor</h2>
         <div className="ab-head-tools">
           <label
-            className="ab-match-toggle"
-            title="Match playback loudness for a fair A/B comparison"
+            className="ab-match-toggle has-tooltip"
+            data-tooltip={tips.ab.lufsMatch}
+            data-tooltip-position="bottom"
           >
             <input
               type="checkbox"

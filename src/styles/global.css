@@ -772,6 +772,12 @@ a {
   color: var(--text-dim);
   font-size: 10px;
   white-space: nowrap;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ab-match-toggle span {
+  line-height: 1;
 }
 
 .wave-stack {
@@ -1025,7 +1031,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: var(--text);
 }
 
-.toggle-row input[type="checkbox"] {
+.toggle-row input[type="checkbox"],
+.ab-match-toggle input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -1039,12 +1046,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
   margin: 0;
 }
 
-.toggle-row input[type="checkbox"]:checked {
+.toggle-row input[type="checkbox"]:checked,
+.ab-match-toggle input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-.toggle-row input[type="checkbox"]:checked::after {
+.toggle-row input[type="checkbox"]:checked::after,
+.ab-match-toggle input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
   top: 2px;
