@@ -85,15 +85,16 @@ export class DSPWorkerClient {
   private maxWorkers = Math.min(4, navigator.hardwareConcurrency || 4);
   private nextRequestId = 1;
   private taskQueue: WorkerWaiter[] = [];
+  private generation = 0;
 
-  async initWorker(): Promise<WorkerInstance> {
+  private initWorker(): WorkerInstance {
     const worker = new Worker(new URL("./worker.js", import.meta.url), {
       type: "module"
     });
 
     const instance: WorkerInstance = {
       worker,
-      busy: false,
+      busy: true,
       pendingRequests: new Map()
     };
 
@@ -114,6 +115,7 @@ export class DSPWorkerClient {
   }
 
   terminate() {
+    this.generation += 1;
     for (const instance of this.workerInstances) {
       instance.worker.terminate();
       for (const pending of instance.pendingRequests.values()) {
@@ -225,9 +227,7 @@ export class DSPWorkerClient {
 
     // 2. 최대 개수 미만이면 새로 생성
     if (this.workerInstances.length < this.maxWorkers) {
-      instance = await this.initWorker();
-      instance.busy = true;
-      return instance;
+      return this.initWorker();
     }
 
     // 3. 꽉 찼으면 빌 때까지 대기
@@ -249,10 +249,11 @@ export class DSPWorkerClient {
   private replaceFailedWorkers() {
     while (this.taskQueue.length > 0 && this.workerInstances.length < this.maxWorkers) {
       const waiter = this.taskQueue.shift()!;
-      void this.initWorker().then((instance) => {
-        instance.busy = true;
-        waiter.resolve(instance);
-      }, waiter.reject);
+      try {
+        waiter.resolve(this.initWorker());
+      } catch (error) {
+        waiter.reject(error);
+      }
     }
   }
 
@@ -262,7 +263,12 @@ export class DSPWorkerClient {
     onProgress?: (progress: number, status: string) => void,
     transferables: ArrayBuffer[] = []
   ): Promise<T> {
+    const generation = this.generation;
     const instance = await this.getAvailableInstance();
+    // terminate() can run while the acquired instance is awaiting this continuation.
+    if (generation !== this.generation) {
+      throw new Error("DSP worker terminated");
+    }
 
     return new Promise<T>((resolve, reject) => {
       const id = this.nextRequestId++;
@@ -303,7 +309,7 @@ export class DSPWorkerClient {
     });
 
     for (let channelIndex = 0; channelIndex < channels.length; channelIndex += 1) {
-      output.copyToChannel(new Float32Array(channels[channelIndex]), channelIndex);
+      output.copyToChannel(channels[channelIndex] as Float32Array<ArrayBuffer>, channelIndex);
     }
 
     return output;

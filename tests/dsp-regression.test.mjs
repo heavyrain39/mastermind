@@ -4,6 +4,58 @@ import assert from "node:assert/strict";
 import { processWithFFT } from "../src/lib/dsp/fft.js";
 import { applySoftKneeCurve } from "../src/lib/dsp/limiter.js";
 import { measureLUFS } from "../src/lib/dsp/lufs.js";
+import { findChannelTruePeak, findTruePeak } from "../src/lib/dsp/true-peak.js";
+
+test("true peak includes every boundary sample, short buffers and boundary interpolation", () => {
+  for (const length of [1, 2, 3, 4, 48000]) {
+    for (const position of new Set([0, 1, length - 2, length - 1])) {
+      if (position < 0 || position >= length) continue;
+      const signal = new Float32Array(length);
+      signal[position] = -1.2;
+      assert.ok(findChannelTruePeak(signal) >= Math.abs(signal[position]));
+      const peakDB = findTruePeak({ numberOfChannels: 1, getChannelData: () => signal });
+      assert.ok(peakDB >= 20 * Math.log10(Math.abs(signal[position])) - 1e-6);
+    }
+  }
+  assert.equal(findChannelTruePeak(new Float32Array()), 0);
+  assert.equal(findChannelTruePeak(new Float32Array(10)), 0);
+  assert.ok(findChannelTruePeak(new Float32Array([1, 1])) > 1);
+});
+
+test("full export chain respects the ceiling at both ends and in the middle", async () => {
+  let messages = [];
+  const previousSelf = globalThis.self;
+  const previousBuffer = globalThis.AudioBuffer;
+  globalThis.self = { postMessage: (message) => messages.push(message) };
+  try {
+    await import("../src/lib/dsp/worker.js");
+    for (const stereoWidth of [100, 101]) {
+      for (const position of [0, 1, 24000, 47998, 47999]) {
+        const signal = new Float32Array(48000);
+        signal[position] = 1.2;
+        messages = [];
+        await self.onmessage({ data: {
+          id: 1, type: "RENDER_FULL_CHAIN", data: {
+            channels: [signal, signal.slice()], sampleRate: 48000, mode: "export",
+            settings: {
+              presetId: "none", inputGain: 0, normalizeLoudness: false,
+              truePeakLimit: true, truePeakCeiling: -1, stereoWidth, centerBass: false
+            }
+          }
+        } });
+        const response = messages.find((m) => m.success === true);
+        assert.ok(response, JSON.stringify(messages.at(-1)));
+        for (const channel of response.result.channels) {
+          assert.equal(channel.length, signal.length);
+          assert.ok(findChannelTruePeak(channel) <= 10 ** (-1 / 20) + 1e-6, `width=${stereoWidth}, position=${position}`);
+        }
+      }
+    }
+  } finally {
+    globalThis.self = previousSelf;
+    globalThis.AudioBuffer = previousBuffer;
+  }
+});
 
 test("FFT identity processing preserves level and boundaries", () => {
   for (const length of [1, 511, 2048, 48000, 48511]) {

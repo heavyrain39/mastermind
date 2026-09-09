@@ -47,23 +47,7 @@ export function findTruePeak(audioBuffer) {
   let maxPeak = 0;
 
   for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
-    const channelData = audioBuffer.getChannelData(ch);
-    const prevSamples = [0, 0, 0, 0];
-
-    for (let i = 0; i < channelData.length; i++) {
-      // Shift previous samples
-      prevSamples[0] = prevSamples[1];
-      prevSamples[1] = prevSamples[2];
-      prevSamples[2] = prevSamples[3];
-      prevSamples[3] = channelData[i];
-
-      if (i >= 3) {
-        const truePeak = calculateTruePeakSample(prevSamples);
-        if (truePeak > maxPeak) {
-          maxPeak = truePeak;
-        }
-      }
-    }
+    maxPeak = Math.max(maxPeak, findChannelTruePeak(audioBuffer.getChannelData(ch)));
   }
 
   // Convert to dBTP (0 dBTP = 1.0 linear)
@@ -80,13 +64,16 @@ export function findChannelTruePeak(channelData) {
   let maxPeak = 0;
   const prevSamples = [0, 0, 0, 0];
 
-  for (let i = 0; i < channelData.length; i++) {
+  // Zero-pad the interpolation context at each end, while measuring only
+  // intervals inside the signal. Always include every actual sample peak.
+  for (let i = 0; i <= channelData.length; i++) {
     prevSamples[0] = prevSamples[1];
     prevSamples[1] = prevSamples[2];
     prevSamples[2] = prevSamples[3];
-    prevSamples[3] = channelData[i];
+    prevSamples[3] = i < channelData.length ? channelData[i] : 0;
+    maxPeak = Math.max(maxPeak, Math.abs(prevSamples[3]));
 
-    if (i >= 3) {
+    if (i >= 2) {
       const truePeak = calculateTruePeakSample(prevSamples);
       if (truePeak > maxPeak) {
         maxPeak = truePeak;

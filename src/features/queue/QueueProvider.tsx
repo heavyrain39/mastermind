@@ -10,9 +10,8 @@ import {
 import { generateZipInWorker } from "../../lib/audio/zip";
 import { type TrackItem } from "../../shared/types/audio";
 import { type MasteringSettings } from "../../shared/types/mastering";
-import { resampleAudioBuffer } from "../../lib/audio/wav";
+import { exportMaster } from "../../lib/audio/exportMaster";
 import { encodeWavInWorker, terminateWavWorker } from "../../lib/audio/wavWorkerClient";
-import { encodeMp3 } from "../../lib/audio/mp3";
 import { type DSPWorkerClient, type FullChainSettings, getDSPWorkerClient } from "../../lib/dsp/dspWorkerClient";
 import {
   DEFAULT_PRESET_ID,
@@ -217,28 +216,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     try {
       const metadata = await ensureMetadata(target);
-      const decodedMaster = await decodeUrlToAudioBuffer(target.masteredUrl, getDecodeContext(decodeContextRef));
-      const outputBuffer = await resampleAudioBuffer(decodedMaster, settings.sampleRate);
-      if (settings.outputFormat === "wav") {
-        const wavBlob = await encodeWavInWorker(outputBuffer, {
-          bitDepth: settings.bitDepth,
-          ditherMode: settings.ditherMode,
-          metadata
-        });
-        const url = URL.createObjectURL(wavBlob);
-        triggerDownload(url, deriveMasteredFileName(target.fileName, "wav"));
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        return;
-      }
-
-      const mp3Blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, (percent) => {
-        setDownloadProgress((prev) => { const next = new Map(prev); next.set(trackId, percent); return next; });
-      }, metadata);
-      const url = URL.createObjectURL(mp3Blob);
+      const blob = await exportMaster(
+        target, settings, () => getDecodeContext(decodeContextRef), metadata,
+        (percent) => {
+          setDownloadProgress((prev) => { const next = new Map(prev); next.set(trackId, percent); return next; });
+        }
+      );
+      const url = URL.createObjectURL(blob);
 
       triggerDownload(
         url,
-        deriveMasteredFileName(target.fileName, "mp3")
+        deriveMasteredFileName(target.fileName, settings.outputFormat)
       );
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (error) {
@@ -272,21 +260,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           if (!track) break;
 
           const fileName = fileNamesByTrackId.get(track.id)!;
-          let blob: Blob;
-          const decodedMaster = await decodeUrlToAudioBuffer(track.masteredUrl!, getDecodeContext(decodeContextRef));
-          const outputBuffer = await resampleAudioBuffer(decodedMaster, settings.sampleRate);
-
-          if (settings.outputFormat === "mp3") {
-            const trackMetadata = await ensureMetadata(track);
-            blob = await encodeMp3(outputBuffer, settings.mp3Bitrate, undefined, trackMetadata);
-          } else {
-            const trackMetadata = await ensureMetadata(track);
-            blob = await encodeWavInWorker(outputBuffer, {
-              bitDepth: settings.bitDepth,
-              ditherMode: settings.ditherMode,
-              metadata: trackMetadata
-            });
-          }
+          const trackMetadata = await ensureMetadata(track);
+          const blob = await exportMaster(
+            track, settings, () => getDecodeContext(decodeContextRef), trackMetadata
+          );
 
           filesToZip.push({ name: fileName, data: blob });
         }
@@ -359,7 +336,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
         try {
           const trackMetadata = await ensureMetadata(sourceTrack);
+          if (cancelRef.current) return;
           const decodedBuffer = await decodeFileToAudioBuffer(sourceTrack.sourceFile, decodeContext);
+          if (cancelRef.current) return;
           const originalBuffer = ensureStereoBuffer(decodedBuffer);
 
           setTracks((prev) =>
@@ -371,65 +350,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           );
 
           const originalLufsResult = await workerClient.measureLufs(originalBuffer);
-          let masteredBuffer: AudioBuffer;
-          let masteredLufs: number | undefined;
-
-          try {
-            const mastered = await workerClient.renderFullChain(
-              originalBuffer,
-              workerSettings,
-              "export",
-              (progress: number, status: string) => {
-                const percent = Math.max(6, Math.min(96, Math.round(progress * 90 + 6)));
-                setTracks((prev) =>
-                  prev.map((track) =>
-                    track.id === trackId
-                      ? {
-                        ...track,
-                        progressPercent: Math.max(track.progressPercent || 0, percent),
-                        progressStatus: status || "Processing"
-                      }
-                      : track
-                  )
-                );
-              }
-            );
-            masteredBuffer = mastered.audioBuffer;
-            masteredLufs = mastered.lufs;
-          } catch {
-            setTracks((prev) =>
-              prev.map((track) =>
-                track.id === trackId
-                  ? {
-                    ...track,
-                    progressPercent: Math.max(track.progressPercent || 0, 60),
-                    progressStatus: "Fallback rendering (safe normalize)"
-                  }
-                  : track
-              )
-            );
-            const normalized = await workerClient.normalize(
-              originalBuffer,
-              selectedSettings.targetLufs,
-              selectedSettings.truePeakCeiling,
-              (progress: number, status: string) => {
-                const percent = Math.max(60, Math.min(96, Math.round(progress * 36 + 60)));
-                setTracks((prev) =>
-                  prev.map((track) =>
-                    track.id === trackId
-                      ? {
-                        ...track,
-                        progressPercent: Math.max(track.progressPercent || 0, percent),
-                        progressStatus: status || "Normalizing"
-                      }
-                      : track
-                  )
-                );
-              }
-            );
-            masteredBuffer = normalized.audioBuffer;
-            masteredLufs = normalized.finalLUFS;
-          }
+          if (cancelRef.current) return;
+          const mastered = await workerClient.renderFullChain(
+            originalBuffer,
+            workerSettings,
+            "export",
+            (progress: number, status: string) => {
+              if (cancelRef.current) return;
+              const percent = Math.max(6, Math.min(96, Math.round(progress * 90 + 6)));
+              setTracks((prev) =>
+                prev.map((track) =>
+                  track.id === trackId
+                    ? {
+                      ...track,
+                      progressPercent: Math.max(track.progressPercent || 0, percent),
+                      progressStatus: status || "Processing"
+                    }
+                    : track
+                )
+              );
+            }
+          );
+          const masteredBuffer = mastered.audioBuffer;
+          const masteredLufs = mastered.lufs;
 
           if (cancelRef.current) return;
 
@@ -447,17 +390,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             metadata: trackMetadata
           });
           if (cancelRef.current) return;
+          if (!tracksRef.current.some((track) => track.id === trackId)) return;
           const nextMasteredUrl = URL.createObjectURL(masteredBlob);
           const nextFileName = deriveMasteredFileName(
             sourceTrack.fileName,
             "wav"
           );
 
-          let previousMasteredUrl: string | undefined;
           setTracks((prev) =>
             prev.map((track) => {
               if (track.id !== trackId) return track;
-              previousMasteredUrl = track.masteredUrl;
               return {
                 ...track,
                 status: "done",
@@ -466,6 +408,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 masteredUrl: nextMasteredUrl,
                 masteredFileName: nextFileName,
                 masteredSizeBytes: masteredBlob.size,
+                masteredSampleRate: masteredBuffer.sampleRate,
+                masteredMetadata: trackMetadata,
                 masteredPresetId: selectedPresetId === "custom" ? undefined : selectedPresetId,
                 progressPercent: 100,
                 progressStatus: "Complete",
@@ -473,14 +417,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               };
             })
           );
-
-          if (
-            previousMasteredUrl &&
-            previousMasteredUrl !== sourceTrack.originalUrl &&
-            previousMasteredUrl !== nextMasteredUrl
-          ) {
-            URL.revokeObjectURL(previousMasteredUrl);
-          }
         } catch (error) {
           if (cancelRef.current) return;
           const message = error instanceof Error ? error.message : "Mastering failed";
@@ -540,6 +476,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [tracks, activeTrackId]);
 
   useEffect(() => {
+    const currentMasteredUrls = new Set(tracks.map((track) => track.masteredUrl));
+    for (const previous of tracksRef.current) {
+      if (previous.masteredUrl && !currentMasteredUrls.has(previous.masteredUrl)) {
+        URL.revokeObjectURL(previous.masteredUrl);
+      }
+    }
     tracksRef.current = tracks;
   }, [tracks]);
 
@@ -566,6 +508,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return () => {
+      cancelRef.current = true;
       tracksRef.current.forEach(revokeTrackUrls);
       workerClientRef.current?.terminate();
       terminateWavWorker();
@@ -697,12 +640,6 @@ function getDecodeContext(contextRef: { current: AudioContext | null }) {
 async function decodeFileToAudioBuffer(file: File, context: AudioContext) {
   const rawBuffer = await file.arrayBuffer();
   return context.decodeAudioData(rawBuffer);
-}
-
-async function decodeUrlToAudioBuffer(url: string, context: AudioContext) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Could not read mastered audio (${response.status})`);
-  return context.decodeAudioData(await response.arrayBuffer());
 }
 
 function ensureStereoBuffer(buffer: AudioBuffer) {

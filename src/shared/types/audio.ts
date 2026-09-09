@@ -15,6 +15,8 @@ export interface TrackItem {
   masteredUrl?: string;
   masteredFileName?: string;
   masteredSizeBytes?: number;
+  masteredSampleRate?: number;
+  masteredMetadata?: IAudioMetadata;
   originalLufs?: number;
   masteredLufs?: number;
   masteredPresetId?: string;

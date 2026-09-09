@@ -1,13 +1,13 @@
 {
   "name": "mstrmnd",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
     "build:ext": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-ext.ps1",
     "preview": "vite preview"
   },

@@ -474,6 +474,7 @@ function applyTransparentLimiterToChannels(
       history[1] = history[2];
       history[2] = history[3];
       history[3] = channels[ch][i];
+      truePeak = Math.max(truePeak, Math.abs(history[3]));
 
       if (i >= 3) {
         truePeak = Math.max(truePeak, calculateTruePeakSample(history));
@@ -1783,6 +1784,9 @@ self.onmessage = async (e) => {
           for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
             buffer.copyToChannel(limitedChannels[ch], ch);
           }
+          // Gain-envelope changes can create new inter-sample peaks. Verify the
+          // final signal, including its boundaries, before returning the master.
+          buffer = keepLinearHeadroom(buffer, ceiling);
         }
 
         // Measure final LUFS
