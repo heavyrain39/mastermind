@@ -13,5 +13,9 @@ vite.config.d.ts
 mastermind-ext-v*.zip
 mstrmnd-ext-v*.zip
 
+# Local-only product planning / design documents
+docs/MASTERMIND_DESIGN_RECIPE.md
+docs/MASTERMIND_v*_기획서.md
+
 /private/*
 !/private/*.md

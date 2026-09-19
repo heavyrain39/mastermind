@@ -80,17 +80,6 @@ npm run preview   # 빌드 결과 미리보기
 
 - 배치 결과 리포트 UI (LUFS 변동폭, 피크 값, 소요 시간 요약)
 
-## 디자인 언어
-
-이 웹앱의 UI 디자인 시스템은 **야차완 브랜드 디자인 언어**로서 다른 프로젝트에도 범용 적용 가능하도록 별도 문서화되어 있습니다.
-
-→ [`docs/MASTERMIND_DESIGN_RECIPE.md`](docs/MASTERMIND_DESIGN_RECIPE.md)
-
-## 문서
-
-- [v0.9 기획/현황서](docs/MASTERMIND_v0.9_기획서.md) — 최신 기술 상세
-- [v0.1~v0.8 기획서](docs/) — 버전별 히스토리
-
 ---
 
 *Made by [Yakshawan](https://heavyrain39.github.io/portfolio/)*
