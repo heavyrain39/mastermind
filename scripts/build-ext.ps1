@@ -1,18 +1,31 @@
 $ErrorActionPreference = "Stop"
 
-$NodeVersion = "20.20.2"
+$NodeVersion = "24.19.0"
 $NodeDir = "node-v$NodeVersion-win-x64"
-$NodeZip = "node20.zip"
+$NodeZip = "node24.zip"
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
 $ChecksumFile = "SHASUMS256.txt"
 $ChecksumUrl = "https://nodejs.org/dist/v$NodeVersion/SHASUMS256.txt"
+
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $Stream = [System.IO.File]::OpenRead((Resolve-Path -LiteralPath $Path).Path)
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($Sha256.ComputeHash($Stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $Sha256.Dispose()
+        $Stream.Dispose()
+    }
+}
 
 if (-not (Test-Path -Path $NodeDir)) {
     Write-Host "Downloading Node.js $NodeVersion for a reproducible extension build..."
     Invoke-WebRequest -Uri $NodeUrl -OutFile $NodeZip
     Invoke-WebRequest -Uri $ChecksumUrl -OutFile $ChecksumFile
     $ExpectedHash = ((Select-String -LiteralPath $ChecksumFile -Pattern " node-v$NodeVersion-win-x64.zip$").Line -split "\s+")[0]
-    $ActualHash = (Get-FileHash -LiteralPath $NodeZip -Algorithm SHA256).Hash.ToLowerInvariant()
+    $ActualHash = Get-Sha256Hex -Path $NodeZip
     if (-not $ExpectedHash -or $ActualHash -ne $ExpectedHash.ToLowerInvariant()) {
         throw "Node.js archive checksum verification failed."
     }
@@ -34,7 +47,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "TypeScript build failed."
 }
 
-Write-Host "Running vite build with Node 20 LTS..."
+Write-Host "Running vite build with Node 24 LTS..."
 & $NodeExe $ViteJs build -c vite.ext.config.ts
 
 if ($LASTEXITCODE -eq 0) {

@@ -2,7 +2,7 @@ import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-// Node 20 on Windows does not expand test-file globs. Enumerate explicitly so
+// Windows shells do not consistently expand test-file globs. Enumerate explicitly so
 // the same test suite runs under the supported runtime and newer Node versions.
 const testsDirectory = new URL("../tests/", import.meta.url);
 const files = readdirSync(testsDirectory).filter((name) => name.endsWith(".test.mjs")).sort();

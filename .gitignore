@@ -1,8 +1,10 @@
 node_modules
 node-v20.*-win-x64/
+node-v24.*-win-x64/
 .playwright-cli/
 /output/playwright/
 node20.zip
+node24.zip
 SHASUMS256.txt
 dist
 dist-ext

@@ -63,7 +63,7 @@ npm run build     # tsc -b && vite build
 npm run preview   # 빌드 결과 미리보기
 ```
 
-> ⚠️ **Node v24+에서 `vite build`가 크래시될 수 있습니다.** 로컬 타입 검증은 `tsc -b`로, 프로덕션 빌드는 Node 20 LTS 환경(Vercel 등)을 권장합니다.
+> Node.js 24 LTS를 지원합니다. Vercel 빌드는 `package.json`의 `engines.node`에 따라 최신 24.x를 사용하며, 로컬·확장 프로그램 빌드는 Node 24.19.0에서 검증했습니다.
 
 ## 현재 버전: v0.9.2
 
