@@ -678,6 +678,7 @@ function toWorkerSettings(
     truePeakCeiling: settings.truePeakCeiling,
     centerBass: settings.monoBassAnchor,
     stereoWidth: settings.stereoWidth,
+    autoBalanceAmount: settings.autoBalance,
     clarityAmount: settings.clarity,
     airAmount: settings.air,
     warmthAmount: settings.warmth,
@@ -799,6 +800,7 @@ function sanitizeSettings(patch: Partial<MasteringSettings>): MasteringSettings 
       typeof patch.normalizeLoudness === "boolean"
         ? patch.normalizeLoudness
         : DEFAULT_MASTERING_SETTINGS.normalizeLoudness,
+    autoBalance: clampNumber(patch.autoBalance, 0, 100, DEFAULT_MASTERING_SETTINGS.autoBalance),
     warmth: clampNumber(patch.warmth, 0, 100, DEFAULT_MASTERING_SETTINGS.warmth),
     clarity: clampNumber(patch.clarity, 0, 100, DEFAULT_MASTERING_SETTINGS.clarity),
     air: clampNumber(patch.air, 0, 100, DEFAULT_MASTERING_SETTINGS.air),
@@ -861,6 +863,7 @@ function areSettingsEqual(a: MasteringSettings, b: MasteringSettings) {
     a.truePeakCeiling === b.truePeakCeiling &&
     a.outputTrimDb === b.outputTrimDb &&
     a.normalizeLoudness === b.normalizeLoudness &&
+    a.autoBalance === b.autoBalance &&
     a.warmth === b.warmth &&
     a.clarity === b.clarity &&
     a.air === b.air &&

@@ -5,6 +5,7 @@ export interface MasteringSettings {
   truePeakCeiling: number;
   outputTrimDb: number;
   normalizeLoudness: boolean;
+  autoBalance: number;
   warmth: number;
   clarity: number;
   air: number;

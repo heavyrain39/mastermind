@@ -58,6 +58,41 @@ export function calcHighShelfCoeffs(sampleRate, frequency, gainDB, Q) {
 }
 
 /**
+ * Calculate biquad coefficients for a peaking EQ band (RBJ cookbook)
+ */
+export function calcPeakingCoeffs(sampleRate, frequency, gainDB, Q) {
+  const A = Math.pow(10, gainDB / 40);
+  const w0 = 2 * Math.PI * frequency / sampleRate;
+  const alpha = Math.sin(w0) / (2 * Q);
+  const cosW0 = Math.cos(w0);
+  const b0 = 1 + alpha * A;
+  const b1 = -2 * cosW0;
+  const b2 = 1 - alpha * A;
+  const a0 = 1 + alpha / A;
+  const a1 = -2 * cosW0;
+  const a2 = 1 - alpha / A;
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };
+}
+
+/**
+ * Calculate biquad coefficients for a low shelf filter (RBJ cookbook)
+ */
+export function calcLowShelfCoeffs(sampleRate, frequency, gainDB, Q) {
+  const A = Math.pow(10, gainDB / 40);
+  const w0 = 2 * Math.PI * frequency / sampleRate;
+  const alpha = Math.sin(w0) / (2 * Q);
+  const cosW0 = Math.cos(w0);
+  const sqrtA = Math.sqrt(A);
+  const b0 = A * ((A + 1) - (A - 1) * cosW0 + 2 * sqrtA * alpha);
+  const b1 = 2 * A * ((A - 1) - (A + 1) * cosW0);
+  const b2 = A * ((A + 1) - (A - 1) * cosW0 - 2 * sqrtA * alpha);
+  const a0 = (A + 1) + (A - 1) * cosW0 + 2 * sqrtA * alpha;
+  const a1 = -2 * ((A - 1) + (A + 1) * cosW0);
+  const a2 = (A + 1) + (A - 1) * cosW0 - 2 * sqrtA * alpha;
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };
+}
+
+/**
  * Calculate biquad coefficients for high pass filter (K-weighting)
  * @param {number} sampleRate - Sample rate in Hz
  * @param {number} frequency - Cutoff frequency in Hz

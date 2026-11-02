@@ -17,6 +17,8 @@ export {
   applyBiquadFilterInto,
   calcHighShelfCoeffs,
   calcHighPassCoeffs,
+  calcLowShelfCoeffs,
+  calcPeakingCoeffs,
   dbToLinear,
   linearToDb,
   createHannWindow,

@@ -40,6 +40,7 @@ export interface FullChainSettings {
   truePeakCeiling: number;
   centerBass: boolean;
   stereoWidth: number;
+  autoBalanceAmount?: number;
   clarityAmount?: number;
   airAmount?: number;
   warmthAmount?: number;

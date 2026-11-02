@@ -160,6 +160,12 @@ export function MasteringPanel({ locale }: MasteringPanelProps) {
         <section className="control-group">
           <h3>Tone Character</h3>
           <PercentRow
+            label="Auto Balance"
+            value={masteringSettings.autoBalance}
+            tooltip={tips.mastering.autoBalance}
+            onChange={(value) => updateMasteringSettings({ autoBalance: value })}
+          />
+          <PercentRow
             label="Warmth"
             value={masteringSettings.warmth}
             tooltip={tips.mastering.warmth}

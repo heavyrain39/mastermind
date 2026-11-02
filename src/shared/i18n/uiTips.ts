@@ -42,6 +42,7 @@ export interface UiTips {
     monoBassAnchor: string;
     glueCompression: string;
     autoLevelStrength: string;
+    autoBalance: string;
     sampleRate: string;
     bitDepth: string;
     dither: string;
@@ -101,13 +102,14 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       monoBassAnchor: "저음이 퍼지지 않고 중앙(모노)에서 무게 중심을 잡도록 고정합니다.",
       glueCompression: "분리된 악기 소리들을 뭉쳐주어 하나의 곡처럼 자연스럽게 밀착시킵니다.",
       autoLevelStrength: "곡 전체의 볼륨 밸런스를 자동 보정하는 강도를 설정합니다.",
+      autoBalance: "곡의 음색 밸런스를 분석해 저역·중저역·프레즌스·고역을 기준 밸런스 쪽으로 조금씩 맞춰줍니다.",
       sampleRate: "오디오 해상도를 결정합니다. 일반 음원은 44.1kHz, 영상용은 48kHz를 권장합니다.",
       bitDepth: "오디오의 다이내믹 범위를 결정합니다. 일반 배포용은 16-bit, 고음질용은 24-bit를 선택하세요.",
       dither: "비트 레이트를 낮출 때 발생하는 디지털 노이즈를 자연스러운 미세 노이즈로 덮어줍니다."
     },
     presets: {
       none: "음원에 일절 손대지 않고 볼륨(LUFS)만 목표치에 맞추어 정규화합니다.",
-      transparent: "원본의 느낌을 유지하며 볼륨 정규화와 가벼운 보정만 적용합니다.",
+      transparent: "곡마다 음색 밸런스를 분석해 부족한 대역은 채우고 튀는 대역은 눌러, 어떤 음원이든 무난하게 한 단계 다듬습니다.",
       "warm-tape": "아날로그 테이프의 질감을 더합니다. 저음을 채우고 쏘는 고음은 부드럽게 눌러줍니다.",
       "crystal-air": "초고음역 확장에 집중하여 맑고 찰랑거리는 선명함을 만들어냅니다.",
       "punch-glue": "압축감을 강하게 주어 밀도 높고 타격감 있는 단단한 소리로 만듭니다.",
@@ -158,13 +160,14 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       monoBassAnchor: "Centers the low frequencies (bass) to mono, ensuring they remain solid and anchored in the middle.",
       glueCompression: "Subtly compresses the mix to 'glue' individual instruments together, making them sound like one cohesive track.",
       autoLevelStrength: "Sets how strongly the automatic leveling adjusts the overall volume balance.",
+      autoBalance: "Analyzes the track's tonal balance and gently nudges the lows, low-mids, presence and highs toward a reference balance.",
       sampleRate: "Determines the audio resolution. Choose 48kHz for video or 44.1kHz for standard music releases.",
       bitDepth: "Determines the dynamic range. Select 24-bit for high-res or 16-bit for standard CD/streaming delivery.",
       dither: "Adds a subtle, pleasant noise to mask digital artifacts when reducing the bit depth."
     },
     presets: {
       none: "Applies no tonal or dynamic processing. Only normalizes the volume to the target LUFS.",
-      transparent: "Respects the original balance with minimal intervention. Applies loudness normalization and very subtle corrections.",
+      transparent: "Analyzes each track's tonal balance, filling in what is lacking and taming what sticks out, for a safe one-step polish on any source.",
       "warm-tape": "Recreates the warm texture of analog tape. Enhances low-mid harmonics and gently smooths the highs.",
       "crystal-air": "Prioritizes ultra-high extension and pristine clarity. Ideal for an open, airy, and crisp sound.",
       "punch-glue": "Maximizes impact and cohesion. Applies firm dynamic compression for a dense and punchy result.",
@@ -215,13 +218,14 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       monoBassAnchor: "Centraliza as frequências baixas (graves) em mono, garantindo que permaneçam sólidas no centro.",
       glueCompression: "Comprime sutilmente a mixagem para 'colar' os instrumentos individuais, fazendo-os soar como uma faixa coesa.",
       autoLevelStrength: "Define a intensidade em que o nivelador automático ajusta o equilíbrio geral do volume.",
+      autoBalance: "Analisa o equilíbrio tonal da faixa e aproxima suavemente graves, médios-graves, presença e agudos de um equilíbrio de referência.",
       sampleRate: "Determina a resolução do áudio. Escolha 48kHz para vídeo ou 44.1kHz para lançamentos musicais padrão.",
       bitDepth: "Determina o alcance dinâmico. Selecione 24-bit para alta resolução ou 16-bit para CD/streaming padrão.",
       dither: "Adiciona um ruído sutil e agradável para mascarar artefatos digitais ao reduzir a profundidade de bits."
     },
     presets: {
       none: "Não aplica processamento tonal ou dinâmico. Apenas normaliza o volume para o alvo LUFS.",
-      transparent: "Respeita o equilíbrio original com intervenção mínima. Aplica normalização de volume e correções muito sutis.",
+      transparent: "Analisa o equilíbrio tonal de cada faixa, preenchendo o que falta e suavizando o que se destaca, para um polimento seguro em qualquer fonte.",
       "warm-tape": "Recria a textura quente da fita analógica. Realça os harmônicos graves-médios e suaviza suavemente os agudos.",
       "crystal-air": "Prioriza a extensão ultra-alta e clareza cristalina. Ideal para um som aberto, leve e nítido.",
       "punch-glue": "Maximiza o impacto e coesão. Aplica uma compressão dinâmica firme para um resultado denso e com punch.",
@@ -272,13 +276,14 @@ const tipsByLocale: Record<UiLocale, UiTips> = {
       monoBassAnchor: "低音が広がらないよう、中央（モノラル）に重心を固定します。",
       glueCompression: "バラバラの楽器の音を滑らかにまとめ、自然な一体感を出します。",
       autoLevelStrength: "全体の音量バランスを自動補正する機能の強さを設定します。",
+      autoBalance: "曲の音色バランスを分析し、低域・中低域・プレゼンス・高域を基準のバランスへ少しずつ近づけます。",
       sampleRate: "オーディオの解像度を決定します。一般的には44.1kHz、映像用なら48kHzを推奨します。",
       bitDepth: "オーディオのダイナミックレンジを決定します。配信用は16-bit、高音質用は24-bitを選択してください。",
       dither: "ビット数を下げる際に発生するデジタルノイズを、微少で自然なノイズでカバーします。"
     },
     presets: {
       none: "音質には一切手を加えず、音量（LUFS）だけを目標値に合わせて正規化します。",
-      transparent: "オリジナルの雰囲気を保ちつつ、音量調整とごく軽微な補正のみ行います。",
+      transparent: "曲ごとに音色バランスを分析し、足りない帯域を補い、目立ちすぎる帯域を抑えて、どんな音源も無難にワンランク整えます。",
       "warm-tape": "アナログテープの質感を加えます。低音を豊かにし、刺さる高音は滑らかに抑えます。",
       "crystal-air": "超高音域の広がりにフォーカスし、クリアで抜けの良いサウンドを作ります。",
       "punch-glue": "圧縮感を強めにかけて、密度が高くパンチのあるタイトなサウンドにします。",
