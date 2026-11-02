@@ -26,15 +26,17 @@ export const BALANCE_REGIONS = {
 const REFERENCE_REGION = [800, 3000];
 
 /**
- * Reference balance: the median of 20 full mixes (pop, rock, electronic,
- * piano, ambient; -6 to -16 LUFS), with the top end raised 0.5 dB so the
- * result leans slightly open rather than merely average.
+ * Reference balance: the median of the medians of nine genre folders, 260
+ * commercial releases in all (rock/metal, house/electronic, K-pop, J-pop, western
+ * pop, jazz, film score, doujin; 30 s from the middle of each), with the top
+ * end raised 0.5 dB so the result leans slightly open rather than merely
+ * average. Taking genre medians first keeps large genres from dominating.
  */
 export const BALANCE_TARGET = {
-  low: 9.9,
-  lowMid: 4.9,
-  presence: -6.2,
-  high: -6.6
+  low: 5.2,
+  lowMid: 2.9,
+  presence: -8.5,
+  high: -9.8
 };
 
 // Each region's correction filter, and how far it may move at full amount.
