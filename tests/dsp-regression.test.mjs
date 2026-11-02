@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { processWithFFT } from "../src/lib/dsp/fft.js";
+import { applyFinalFilters } from "../src/lib/dsp/final-filters.js";
 import { applySoftKneeCurve } from "../src/lib/dsp/limiter.js";
 import { measureLUFS } from "../src/lib/dsp/lufs.js";
 import { findChannelTruePeak, findTruePeak } from "../src/lib/dsp/true-peak.js";
@@ -53,6 +54,39 @@ test("full export chain respects the ceiling at both ends and in the middle", as
     }
   } finally {
     globalThis.self = previousSelf;
+    globalThis.AudioBuffer = previousBuffer;
+  }
+});
+
+test("final cleanup lowpass keeps the audible top end flat", () => {
+  const previousBuffer = globalThis.AudioBuffer;
+  globalThis.AudioBuffer = class {
+    constructor({ numberOfChannels, length, sampleRate }) {
+      this.numberOfChannels = numberOfChannels;
+      this.length = length;
+      this.sampleRate = sampleRate;
+      this.channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+    }
+    getChannelData(channel) { return this.channels[channel]; }
+  };
+  try {
+    for (const sampleRate of [44100, 48000]) {
+      const gainDb = (freq) => {
+        const length = sampleRate;
+        const signal = new Float32Array(length);
+        for (let i = 0; i < length; i++) signal[i] = Math.sin(2 * Math.PI * freq * i / sampleRate) * 0.5;
+        const input = { numberOfChannels: 1, length, sampleRate, getChannelData: () => signal };
+        const output = applyFinalFilters(input, { highpass: false }).getChannelData(0);
+        let a = 0, b = 0;
+        for (let i = length / 2; i < length; i++) { a += signal[i] ** 2; b += output[i] ** 2; }
+        return 10 * Math.log10(b / a);
+      };
+      assert.ok(Math.abs(gainDb(1000)) < 0.05, `1 kHz at ${sampleRate}`);
+      assert.ok(gainDb(9000) > -0.1, `9 kHz at ${sampleRate}: ${gainDb(9000)}`);
+      assert.ok(gainDb(15000) > -0.75, `15 kHz at ${sampleRate}: ${gainDb(15000)}`);
+      assert.ok(Math.abs(gainDb(18000) + 3) < 0.3, `18 kHz cutoff at ${sampleRate}: ${gainDb(18000)}`);
+    }
+  } finally {
     globalThis.AudioBuffer = previousBuffer;
   }
 });

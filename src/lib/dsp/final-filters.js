@@ -82,7 +82,10 @@ export function applyOnePoleLP(data, freq, sampleRate) {
  *
  * Defaults:
  * - HPF 30Hz (12dB/oct): one biquad highpass
- * - LPF 18kHz (6dB/oct): one-pole lowpass
+ * - LPF 18kHz (12dB/oct): one Butterworth biquad lowpass, flat through the
+ *   audible top end (about -0.4 dB at 15 kHz at 44.1 kHz). The earlier RC
+ *   one-pole was already -2.5 dB at 9 kHz, which dulled every preset.
+ *   Skipped when the cutoff is too close to Nyquist to be meaningful.
  *
  * @param {AudioBuffer} buffer - Input audio buffer
  * @param {Object} options
@@ -122,8 +125,8 @@ export function applyFinalFilters(buffer, options = {}) {
       applyBiquadToChannel(output, 'highpass', highpassFreq, sampleRate, highpassQ);
     }
 
-    if (lowpass) {
-      applyOnePoleLP(output, lowpassFreq, sampleRate);
+    if (lowpass && lowpassFreq < sampleRate * 0.45) {
+      applyBiquadToChannel(output, 'lowpass', lowpassFreq, sampleRate, Math.SQRT1_2);
     }
   }
 
