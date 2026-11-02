@@ -156,6 +156,20 @@ function enhanceStereoDepth(side, sampleRate, amount) {
   return output;
 }
 
+// Shelf sizes at full control. Set against full mixes, with band levels read
+// relative to 0.8-3 kHz, so each preset lands on its described balance
+// (e.g. Crystal Air about +1.7 dB at 10-16 kHz, Warm Tape about +1.2 dB below
+// 60 Hz and -1.1 dB at 10-16 kHz).
+const AIR_SHELF_HZ = 10000;
+const AIR_SHELF_DB = 3.5;
+const AIR_DRIVE_BASE = 1;
+const AIR_DRIVE_RANGE = 3;
+const AIR_HARMONIC_MIX = 20;
+const WARMTH_LOW_SHELF_HZ = 150;
+const WARMTH_LOW_SHELF_DB = 2;
+const WARMTH_HIGH_SHELF_HZ = 9000;
+const WARMTH_HIGH_SHELF_DB = -1.5;
+
 function applyClarityProcessing(buffer, amount) {
   const clarity = clamp01(amount);
   if (clarity <= 0) {
@@ -166,6 +180,12 @@ function applyClarityProcessing(buffer, amount) {
   processor.dryWetMix = 1.0;
   processor.dynamicEqSensitivity = 0.08 + clarity * 0.22;
   processor.dynamicEqMaxCut = -(1.5 + clarity * 4.5);
+  // The band thresholds are set for a -14 LUFS mix; follow the track's own
+  // loudness so quiet and hot sources get the same de-harsh.
+  const trackLufs = measureLUFS(buffer);
+  if (Number.isFinite(trackLufs)) {
+    processor.levelOffsetDb = Math.max(-24, Math.min(12, trackLufs + 14));
+  }
 
   const wet = processor.process(buffer);
   return mixBuffers(buffer, wet, 0.10 + clarity * 0.28);
@@ -177,13 +197,21 @@ function applyAirProcessing(buffer, amount) {
     return buffer;
   }
 
-  return applyExciterWithOptions(buffer, {
+  // The shelf opens the top end (+AIR_SHELF_DB at full Air); the exciter adds
+  // only harmonics above its highpass. Its old parallel copy of the highs
+  // cancelled against the dry signal and moved the top end by under 0.2 dB.
+  const shelved = applyEQBand(
+    buffer,
+    calcHighShelfCoeffs(buffer.sampleRate, AIR_SHELF_HZ, air * AIR_SHELF_DB, 0.707)
+  );
+  return applyExciterWithOptions(shelved, {
     hpfFreq: 6500 - air * 1000,
     hpfSlope: 12,
-    drive: 0.25 + air * 0.45,
+    drive: AIR_DRIVE_BASE + air * AIR_DRIVE_RANGE,
     bias: 0.08 + air * 0.12,
-    mix: 1.5 + air * 6.5,
-    oversample: true
+    mix: air * AIR_HARMONIC_MIX,
+    oversample: true,
+    harmonicsOnly: true
   });
 }
 
@@ -193,7 +221,9 @@ function applyWarmthProcessing(buffer, amount) {
     return buffer;
   }
 
-  return applyMultibandSaturation(buffer, {
+  // Saturation alone adds texture but barely moves the balance, so tape-style
+  // shelves carry the "fuller lows, softer highs" part of Warmth.
+  const saturated = applyMultibandSaturation(buffer, {
     f1: 200,
     f2: 3800,
     low: {
@@ -221,6 +251,11 @@ function applyWarmthProcessing(buffer, amount) {
       lookaheadMs: 5
     }
   });
+  const sampleRate = saturated.sampleRate;
+  applyEQBand(saturated, calcLowShelfCoeffs(
+    sampleRate, WARMTH_LOW_SHELF_HZ, warmth * WARMTH_LOW_SHELF_DB, 0.707));
+  return applyEQBand(saturated, calcHighShelfCoeffs(
+    sampleRate, WARMTH_HIGH_SHELF_HZ, warmth * WARMTH_HIGH_SHELF_DB, 0.707));
 }
 
 function applyAutoLevelProcessing(buffer, amount, truePeakCeiling) {
@@ -1299,7 +1334,7 @@ function applyGlueCompressor(buffer, options) {
 
   const length = channels[0].length;
   // Use linked (average) sidechain for stereo stability
-  const sidechain = new Float32Array(length);
+  let sidechain = new Float32Array(length);
 
   if (numChannels >= 2) {
     for (let i = 0; i < length; i++) {
@@ -1308,6 +1343,11 @@ function applyGlueCompressor(buffer, options) {
   } else {
     sidechain.set(channels[0]);
   }
+  // Keep kick and bass from driving the gain: without this the whole mix
+  // ducked on every low note and the low end lost ~0.9 dB at full glue.
+  // Two passes (24 dB/oct) so even a -6 dBFS bass line stays below threshold.
+  const sidechainHighpass = calcHighPassCoeffs(sampleRate, 100, 0.707);
+  sidechain = applyBiquadFilter(applyBiquadFilter(sidechain, sidechainHighpass), sidechainHighpass);
 
   // Compression Envelope
   const thresholdLin = Math.pow(10, threshold / 20);

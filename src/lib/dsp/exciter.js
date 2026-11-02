@@ -69,6 +69,7 @@ export class Exciter {
     this.bias = options.bias ?? EXCITER_DEFAULTS.bias;
     this.mix = options.mix ?? EXCITER_DEFAULTS.mix;
     this.oversample = options.oversample ?? true; // Default to true for quality
+    this.harmonicsOnly = options.harmonicsOnly ?? false;
   }
 
   /**
@@ -88,6 +89,13 @@ export class Exciter {
     const mixRatio = this.mix / 100;
     const drive = this.drive;
     const bias = this.bias;
+    const biasOffset = Math.tanh(bias);
+    // With harmonicsOnly, drop the shaper's linear term (the filtered highs
+    // themselves). Those come back phase-shifted by the 24 dB/oct highpass and
+    // cancelled the dry signal around the cutoff, so the exciter only adds the
+    // harmonics and level changes are left to an EQ.
+    const linearGain = this.harmonicsOnly ? drive * (1 - biasOffset * biasOffset) : 0;
+    const shape = (x) => Math.tanh(x * drive + bias) - biasOffset - linearGain * x;
 
     for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
       const input = buffer.getChannelData(ch);
@@ -105,105 +113,29 @@ export class Exciter {
 
       // Apply saturation and parallel mix
       if (this.oversample) {
-        // 2x Oversampling
-        const prevSamples = [0, 0, 0, 0];
-
+        // 2x oversampling: saturate the sample and both half-sample points
+        // (Catmull-Rom), then downsample with a zero-phase [0.25, 0.5, 0.25].
         for (let i = 0; i < input.length; i++) {
-          const dry = input[i];
-          const x = filtered[i];
-
-          // Shift history
-          prevSamples[0] = prevSamples[1];
-          prevSamples[1] = prevSamples[2];
-          prevSamples[2] = prevSamples[3];
-          prevSamples[3] = x;
-
-          // Process original sample (t=0, at y2 position in history wait... y2 is current input?)
-          // In loop i: prevSamples[3] is current x[i].
-          // Catmull needs y0, y1, y2, y3. 
-          // At step i, we want to produce output for step i.
-          // BUT oversampling usually introduces latency.
-          // Let's assume standard behavior:
-          // y1 is current sample, we interpolate between y1 and y2? 
-          // Let's stick to the limiter implementation style: history holds previous inputs.
-
-          // Actually, precise 2x oversampling:
-          // 1. Upsample: Insert zero or hold? Catmull-Rom interpolates the mid-point.
-          //    We need output at t and t+0.5.
-          //    If sample matches "y2" in the history buffer context...
-
-          // Let's use a simpler history logic for clarity:
-          // We have x[i]. We need x[i-0.5].
-          // interpolateCatmullRom(y0, y1, y2, y3, t)
-          // y2 is current sample. y1 is previous. t=0.5 gives midway between y1 and y2.
-
-          const y0 = prevSamples[0];
-          const y1 = prevSamples[1];
-          const y2 = prevSamples[2];
-          const y3 = prevSamples[3];
-
-          // Sample at regular time
-          const wet1 = Math.tanh(y2 * drive + bias);
-
-          // Sample at +0.5 offset (midway between y2 and y3? No, between y1 and y2 is past?)
-          // Doing causal interpolation (between y2 and y3) requires lookahead (y3).
-          // With current buffer [y0, y1, y2, y3], y3 is "current", y2 is "previous".
-          // So we can interpolate between y2 and y3 (t=0.5).
-
-          // But 'filtered' array is fully available! We don't need a rolling buffer, we can just look ahead.
-          // It's much faster to just index the array.
-        }
-
-        // Faster array-access approach
-        for (let i = 0; i < input.length; i++) {
-          const dry = input[i];
-
-          // Get context samples from 'filtered' array
           const p0 = filtered[i - 2] || 0;
           const p1 = filtered[i - 1] || 0;
           const p2 = filtered[i] || 0;
           const p3 = filtered[i + 1] || 0;
-
-          // Original sample
-          const s1 = p2;
-          // Half-sample (oversampled)
-          const s2 = interpolateCatmullRom(p0, p1, p2, p3, 0.5); // Interpolates between p1 and p2
-
-          // Wait, interpolateCatmullRom(y0, y1, y2, y3, t) in my utils means t is between y1 and y2.
-          // If I pass p0, p1, p2, p3, it interpolates between p1 and p2.
-          // p2 is current sample i. p1 is i-1.
-          // So s2 is sample at i - 0.5.
-          // We want i and i + 0.5?
-
-          // Let's define:
-          // Sample A: at i (using p2 directly is cleaner than interp? No, interp at t=1 is y2)
-          // Sample B: at i + 0.5 (between p2 and p3).
-          // To get between p2 and p3, I need: p1, p2, p3, p4.
-          // interpolate(p1, p2, p3, p4, 0.5) -> value at i + 0.5
-
           const p4 = filtered[i + 2] || 0;
 
-          // Zero-phase oversampling and DC offset correction
-          const biasOffset = Math.tanh(bias);
-          const wetCurr = Math.tanh(p2 * drive + bias) - biasOffset;
-          const sPrev = interpolateCatmullRom(p0, p1, p2, p3, 0.5);
-          const wetPrev = Math.tanh(sPrev * drive + bias) - biasOffset;
-          const sNext = interpolateCatmullRom(p1, p2, p3, p4, 0.5);
-          const wetNext = Math.tanh(sNext * drive + bias) - biasOffset;
-
-          // Downsample using zero-phase [0.25, 0.5, 0.25] filter
+          const wetPrev = shape(interpolateCatmullRom(p0, p1, p2, p3, 0.5));
+          const wetCurr = shape(p2);
+          const wetNext = shape(interpolateCatmullRom(p1, p2, p3, p4, 0.5));
           const wet = wetPrev * 0.25 + wetCurr * 0.5 + wetNext * 0.25;
 
-          out[i] = dry + wet * mixRatio;
+          out[i] = input[i] + wet * mixRatio;
         }
 
       } else {
         // Original non-oversampled loop
         for (let i = 0; i < input.length; i++) {
           const dry = input[i];
-          const wet = Math.tanh(filtered[i] * drive + bias);
           // Parallel addition: dry + wet * mix (not blend)
-          out[i] = dry + wet * mixRatio;
+          out[i] = dry + shape(filtered[i]) * mixRatio;
         }
       }
 

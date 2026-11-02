@@ -343,9 +343,12 @@ export class MultibandSaturator {
 
       if (onProgress) onProgress((ch + 0.8) / buffer.numberOfChannels);
 
-      // 4. Sum bands back together
+      // 4. Add each band's change to the unsplit input. Summing the bands
+      // themselves would pass the whole mix through the crossover's phase
+      // rotation, which re-grows clipped peaks by up to ~4 dB on loud masters.
       for (let i = 0; i < input.length; i++) {
-        out[i] = satLow[i] + satMid[i] + satHigh[i];
+        out[i] = input[i] +
+          (satLow[i] - low[i]) + (satMid[i] - mid[i]) + (satHigh[i] - high[i]);
       }
 
       if (onProgress) onProgress((ch + 1) / buffer.numberOfChannels);

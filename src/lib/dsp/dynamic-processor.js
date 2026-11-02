@@ -274,6 +274,10 @@ export class HybridDynamicProcessor {
 
     // AI artifact targeting
     this.aiArtifactMode = options.aiArtifactMode ?? true;
+
+    // Shifts every band threshold, e.g. by the track's loudness above its
+    // reference so louder and quieter mixes get the same treatment.
+    this.levelOffsetDb = options.levelOffsetDb ?? 0;
   }
 
   /**
@@ -281,20 +285,32 @@ export class HybridDynamicProcessor {
    * @private
    */
   _initBandProcessors(sampleRate) {
-    if (this.sampleRate === sampleRate && this.bandEnvelopes) {
+    if (this.sampleRate === sampleRate && this.bandEnvelopes &&
+        this.initializedOffsetDb === this.levelOffsetDb) {
       return; // Already initialized
     }
 
     this.sampleRate = sampleRate;
+    this.initializedOffsetDb = this.levelOffsetDb;
     this.bandEnvelopes = [];
     this.bandCompressors = [];
 
+    // Envelopes advance once per FFT frame, not once per sample. Timing them
+    // at the sample rate made attack/release 512x slower (2 ms -> about 1 s).
+    const frameRate = sampleRate / this.hopSize;
+
+    // Parseval scale from summed one-sided |X|^2 of a Hann-windowed frame to
+    // the band's mean-square level, so band thresholds read as dBFS RMS.
+    let windowEnergy = 0;
+    for (const w of this.processor.window) windowEnergy += w * w;
+    this.bandPowerScale = 2 / (this.fftSize * windowEnergy);
+
     for (const band of this.bands) {
       this.bandEnvelopes.push(
-        new EnvelopeFollower(sampleRate, band.attackMs, band.releaseMs)
+        new EnvelopeFollower(frameRate, band.attackMs, band.releaseMs)
       );
       this.bandCompressors.push(
-        new GainComputer(band.thresholdDb, band.ratio, band.kneeDb)
+        new GainComputer(band.thresholdDb + this.levelOffsetDb, band.ratio, band.kneeDb)
       );
     }
   }
@@ -322,20 +338,16 @@ export class HybridDynamicProcessor {
 
     // 1. Compute band energies
     const bandEnergies = new Float32Array(this.bands.length);
-    const bandBinCounts = new Float32Array(this.bands.length);
 
     for (let bin = 0; bin < this.numBins; bin++) {
       const freq = this.processor.binToFrequency(bin, sampleRate);
       const bandIdx = this._getBandForFreq(freq);
       bandEnergies[bandIdx] += magnitudes[bin] * magnitudes[bin];
-      bandBinCounts[bandIdx]++;
     }
 
-    // RMS per band
+    // RMS level of each band's signal (linear, full scale = 1)
     for (let i = 0; i < this.bands.length; i++) {
-      if (bandBinCounts[i] > 0) {
-        bandEnergies[i] = Math.sqrt(bandEnergies[i] / bandBinCounts[i]);
-      }
+      bandEnergies[i] = Math.sqrt(bandEnergies[i] * this.bandPowerScale);
     }
 
     // 2. Compute compression gain per band
@@ -499,7 +511,7 @@ export class HybridDynamicProcessor {
       const band = this.bands[bandIndex];
       this.bandEnvelopes[bandIndex].setTimes(band.attackMs, band.releaseMs);
       this.bandCompressors[bandIndex].setParams(
-        band.thresholdDb,
+        band.thresholdDb + this.levelOffsetDb,
         band.ratio,
         band.kneeDb
       );
@@ -545,17 +557,25 @@ export class HybridDynamicProcessor {
    * @returns {HybridDynamicProcessor}
    */
   static createMasteringPreset() {
+    // Thresholds are band RMS in dBFS for a track at -14 LUFS (shift them with
+    // levelOffsetDb for other levels). They sit around the 75th-90th percentile
+    // of band levels measured on full mixes, so the bands only move when they
+    // jump out: presence/brilliance de-harsh, low-mids de-mud, lows barely.
+    const mastering = {
+      sub: { thresholdDb: -14, ratio: 1.5, kneeDb: 10 },
+      bass: { thresholdDb: -14, ratio: 1.5, kneeDb: 10 },
+      lowMid: { thresholdDb: -18, ratio: 2, kneeDb: 8 },
+      mid: { thresholdDb: -25, ratio: 2, kneeDb: 8 },
+      presence: { thresholdDb: -32, ratio: 3, kneeDb: 6 },
+      brilliance: { thresholdDb: -31, ratio: 3, kneeDb: 6 },
+      air: { thresholdDb: -29, ratio: 2, kneeDb: 8 }
+    };
     return new HybridDynamicProcessor({
       dynamicEqSensitivity: 0.2,   // Very gentle
       dynamicEqMaxCut: -3,         // Minimal cuts
       aiArtifactMode: false,       // Neutral
       dryWetMix: 0.15,             // 15% wet, 85% dry for maximum transparency
-      bands: DEFAULT_BANDS.map(band => ({
-        ...band,
-        thresholdDb: band.thresholdDb + 12, // Raise thresholds 12dB (much less compression)
-        kneeDb: band.kneeDb + 8,            // Very soft knees
-        ratio: Math.max(1.2, band.ratio - 1.5) // Very gentle ratios
-      }))
+      bands: DEFAULT_BANDS.map(band => ({ ...band, ...mastering[band.name] }))
     });
   }
 }

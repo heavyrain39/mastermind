@@ -10,9 +10,10 @@
  * Apply multiband transient shaping to an AudioBuffer
  * @param {AudioBuffer} buffer - Input audio buffer
  * @param {Function} onProgress - Progress callback (0-1)
- * @param {number} [mix=1] - Wet amount, blended per band. The crossover shifts
- *   phase, so blending with the unsplit input instead would notch the
- *   crossover frequencies (about -6 dB at 4 kHz for a 25% mix).
+ * @param {number} [mix=1] - Wet amount. Only each band's gain change is added
+ *   to the input: crossfading the input with the summed bands would notch the
+ *   crossovers (about -6 dB at 4 kHz for a 25% mix), and the summed bands
+ *   alone carry the crossover's phase rotation, which re-grows clipped peaks.
  * @returns {AudioBuffer} - Processed audio buffer
  */
 export function applyMultibandTransient(buffer, onProgress = () => { }, mix = 1) {
@@ -80,11 +81,11 @@ export function applyMultibandTransient(buffer, onProgress = () => { }, mix = 1)
     const midProcessed = processTransients(midBand, bands.mid, sampleRate);
     const highProcessed = processTransients(highBand, bands.high, sampleRate);
 
-    // Sum bands back together, blending dry and wet inside the split domain
+    // Add the shaped bands' change to the unsplit input
     for (let i = 0; i < length; i++) {
-      const dry = lowBand[i] + midBand[i] + highBand[i];
-      const wet = lowProcessed[i] + midProcessed[i] + highProcessed[i];
-      output[i] = dry + (wet - dry) * mix;
+      const change = (lowProcessed[i] - lowBand[i]) +
+        (midProcessed[i] - midBand[i]) + (highProcessed[i] - highBand[i]);
+      output[i] = input[i] + change * mix;
     }
 
     onProgress((ch + 1) / numChannels);
