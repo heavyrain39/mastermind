@@ -1639,8 +1639,7 @@ self.onmessage = async (e) => {
         // 4.5 Optional transient enhancement for high punch settings
         if (autoLevelAmount >= 0.55) {
           sendProgress(id, 0.58, 'Applying transient enhancement...');
-          const transientWet = applyMultibandTransient(buffer);
-          buffer = mixBuffers(buffer, transientWet, 0.10 + (autoLevelAmount - 0.55) * 0.35);
+          buffer = applyMultibandTransient(buffer, undefined, 0.10 + (autoLevelAmount - 0.55) * 0.35);
         }
 
         // --- PREVIEW MODE END ---
